@@ -32,3 +32,7 @@ screenshots/
 
 # external references
 references/mattpocock-skills/
+
+# local browser-worker runtime data
+services/browser-worker/.local_profiles/
+services/browser-worker/.local_screenshots/
