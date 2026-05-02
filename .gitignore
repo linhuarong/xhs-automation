@@ -1,0 +1,31 @@
+﻿# dependencies
+node_modules/
+.venv/
+venv/
+__pycache__/
+
+# env
+.env
+.env.*
+!.env.example
+
+# logs
+logs/*.log
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/settings.json
+
+# secrets
+*.pem
+*.key
+*.crt
+cookies.json
+tokens.json
+secrets.json
+
+# generated assets
+tmp/
+downloads/
+screenshots/
