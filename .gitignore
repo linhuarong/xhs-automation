@@ -29,3 +29,6 @@ secrets.json
 tmp/
 downloads/
 screenshots/
+
+# external references
+references/mattpocock-skills/
