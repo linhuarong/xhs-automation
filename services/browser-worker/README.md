@@ -2,7 +2,7 @@
 
 FastAPI skeleton for the browser-worker service.
 
-This task only provides the minimal service shell and health check. It does not implement XHS page automation, Selenium, Playwright, Feishu, MinIO, or PostgreSQL integration.
+This service currently provides the minimal FastAPI shell, health check, schemas, and a local development Chrome provider. It does not implement XHS page automation, publishing, search, Feishu, MinIO, or PostgreSQL integration.
 
 ## Local Setup
 
@@ -37,3 +37,21 @@ Expected response:
   "version": "0.1.0"
 }
 ```
+
+## Local Chrome Provider Smoke Test
+
+The Selenium Chrome provider is only for local development debugging. It starts a normal local Chrome profile, does not open XHS, and does not visit any external website.
+
+Run this from the `services/browser-worker` directory after installing dependencies:
+
+```powershell
+python -c "from app.providers import SeleniumChromeProvider; provider = SeleniumChromeProvider(); session = provider.open_profile('local-dev'); print(session); print(provider.check_login(provider.get_driver(session))); provider.close_profile(session)"
+```
+
+To capture a local screenshot of the initial Chrome window:
+
+```powershell
+python -c "from app.providers import SeleniumChromeProvider; provider = SeleniumChromeProvider(); session = provider.open_profile('local-dev'); print(provider.capture_screenshot(session, 'smoke')); provider.close_profile(session)"
+```
+
+Local Chrome profile data is written under `.local_profiles/{account_id}` by default. Local screenshots are written under `.local_screenshots/{session_id}/{name}.png` by default.
