@@ -19,15 +19,16 @@ def get_logger(name: str) -> logging.Logger:
 
 
 def log_job_event(
-    logger: logging.Logger,
     job_id: str,
     step: str,
     status: str,
     message: str | None = None,
     error_code: str | None = None,
     extra: dict[str, Any] | None = None,
+    logger: logging.Logger | None = None,
 ) -> None:
     """Log a structured job event to console."""
+    logger = logger or get_logger("browser-worker")
     payload: dict[str, Any] = {
         "job_id": job_id,
         "step": step,
