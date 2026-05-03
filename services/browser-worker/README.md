@@ -89,6 +89,30 @@ Invoke-RestMethod -Method Post http://127.0.0.1:8000/api/xhs/search `
   -Body '{"job_id":"search-manual-1","account_id":"xhs_dev_01","keyword":"眼影"}'
 ```
 
+## Open Local Chrome Profile
+
+Use `scripts/open_profile.ps1` to open the local Chrome profile for a specific `account_id` during manual development checks. The script creates the profile directory under `.local_profiles/{account_id}` and opens Chrome with `--user-data-dir` pointing to that directory.
+
+Open the default XHS home page:
+
+```powershell
+.\scripts\open_profile.ps1 xhs_dev_01
+```
+
+Open a specific URL, such as Chrome version details:
+
+```powershell
+.\scripts\open_profile.ps1 xhs_dev_01 -Url "chrome://version"
+```
+
+If Chrome is installed in a non-standard location, pass the executable path:
+
+```powershell
+.\scripts\open_profile.ps1 xhs_dev_01 -ChromePath "C:\Path\To\chrome.exe"
+```
+
+In `chrome://version`, confirm that `Profile Path` points to `services\browser-worker\.local_profiles\xhs_dev_01\Default` or the matching Chrome profile path under that user data directory.
+
 ## Pytest
 
 Install dependencies, then run tests from the `services/browser-worker` directory:
