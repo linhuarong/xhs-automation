@@ -65,6 +65,17 @@ Expected final output:
 browser-worker smoke test passed
 ```
 
+## Pytest
+
+Install dependencies, then run tests from the `services/browser-worker` directory:
+
+```powershell
+pip install -r requirements.txt
+pytest
+```
+
+The pytest suite covers the health endpoint, schema defaults, `WorkerResult`, and the in-memory job registry. It does not start Chrome, execute Selenium, visit XHS, or call external services.
+
 ## Local Chrome Provider Smoke Test
 
 The Selenium Chrome provider is only for local development debugging. It starts a normal local Chrome profile, does not open XHS, and does not visit any external website.
