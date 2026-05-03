@@ -94,6 +94,17 @@ python -c "from app.services.image_downloader import download_images; print(down
 
 Local downloads are ignored by Git under `.local_downloads/`. This service does not upload to MinIO or call Feishu/PostgreSQL.
 
+## Browser Utility Layer
+
+The browser-worker includes small browser utility helpers that operate only on caller-provided driver or element objects:
+
+- `save_screenshot(driver, job_id, name)` saves `{screenshot_root}/{job_id}/{name}.png` locally and does not upload to MinIO.
+- `upload_files_to_input(file_input, file_paths)` validates local paths and sends newline-joined paths to a file input via `send_keys`.
+- `clear_and_type(element, text)` clears an element and types text via `send_keys`.
+- `safe_type(element, text)` uses `clear + send_keys` when available, with a `click + send_keys` fallback.
+
+These helpers do not open websites, use the clipboard, operate OS file picker dialogs, or make network requests.
+
 ## Local Chrome Provider Smoke Test
 
 The Selenium Chrome provider is only for local development debugging. It starts a normal local Chrome profile, does not open XHS, and does not visit any external website.
