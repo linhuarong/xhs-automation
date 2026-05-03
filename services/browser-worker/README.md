@@ -65,6 +65,26 @@ Expected final output:
 browser-worker smoke test passed
 ```
 
+## XHS Search Prototype
+
+`POST /api/xhs/search` now runs a minimal real-browser search prototype through the local Selenium Chrome provider. It opens the XHS search page, types the keyword into a visible search input, presses Enter, saves a local screenshot, and returns a `WorkerResult`.
+
+This prototype is only for low-frequency manual validation:
+
+- It uses a real browser page and does not call unauthorized XHS APIs.
+- It does not reverse engineer requests, fake XHR/fetch, or bypass login, captcha, QR code, risk control, or second-factor checks.
+- First run may require a human to log in in the local Chrome profile.
+- If login, captcha, verification, or risk control appears, the job returns `waiting_human_verification`.
+- It does not upload screenshots to MinIO and does not write PostgreSQL or Feishu.
+
+Manual request example after starting the service:
+
+```powershell
+Invoke-RestMethod -Method Post http://127.0.0.1:8000/api/xhs/search `
+  -ContentType "application/json" `
+  -Body '{"job_id":"search-manual-1","account_id":"xhs_dev_01","keyword":"眼影"}'
+```
+
 ## Pytest
 
 Install dependencies, then run tests from the `services/browser-worker` directory:
