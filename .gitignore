@@ -36,3 +36,4 @@ references/mattpocock-skills/
 # local browser-worker runtime data
 services/browser-worker/.local_profiles/
 services/browser-worker/.local_screenshots/
+services/browser-worker/.local_downloads/
