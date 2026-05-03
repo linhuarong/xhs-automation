@@ -4,7 +4,11 @@ from typing import Any
 from app.core.xhs_selectors import (
     HUMAN_REQUIRED_SELECTORS,
     RESULT_AREA_SELECTORS,
-    RESULT_ITEM_SELECTORS,
+    RESULT_AUTHOR_SELECTORS,
+    RESULT_CARD_SELECTORS,
+    RESULT_LINK_SELECTORS,
+    RESULT_METRIC_SELECTORS,
+    RESULT_TITLE_SELECTORS,
     SEARCH_INPUT_SELECTORS,
     XHS_SEARCH_URL,
 )
@@ -38,6 +42,30 @@ def _find_elements(driver: Any, selector: str) -> list[Any]:
         return []
 
 
+def _find_child_elements(element: Any, selector: str) -> list[Any]:
+    """Find child elements with a CSS selector."""
+    find_elements = getattr(element, "find_elements", None)
+    if find_elements is None:
+        return []
+
+    try:
+        return list(find_elements("css selector", selector))
+    except Exception:
+        return []
+
+
+def _is_visible(element: Any) -> bool:
+    """Return whether an element is visible."""
+    is_displayed = getattr(element, "is_displayed", None)
+    if is_displayed is None:
+        return True
+
+    try:
+        return bool(is_displayed())
+    except Exception:
+        return False
+
+
 def _has_visible_element(driver: Any, selectors: list[str]) -> bool:
     """Return whether any selector has a visible element."""
     for selector in selectors:
@@ -49,8 +77,7 @@ def _has_visible_element(driver: Any, selectors: list[str]) -> bool:
             continue
 
         for element in _find_elements(driver, selector):
-            is_displayed = getattr(element, "is_displayed", None)
-            if is_displayed is None or is_displayed():
+            if _is_visible(element):
                 return True
     return False
 
@@ -59,26 +86,131 @@ def _find_first_element(driver: Any, selectors: list[str]) -> tuple[Any | None, 
     """Find the first visible element and selector from candidates."""
     for selector in selectors:
         for element in _find_elements(driver, selector):
-            is_displayed = getattr(element, "is_displayed", None)
-            if is_displayed is None or is_displayed():
+            if _is_visible(element):
                 return element, selector
     return None, None
 
 
-def _extract_visible_items(driver: Any, limit: int) -> list[dict]:
-    """Extract visible result item text."""
-    items: list[dict] = []
+def _element_text(element: Any) -> str:
+    """Read normalized visible text from an element."""
+    return (getattr(element, "text", "") or "").strip()
+
+
+def _element_attr(element: Any, name: str) -> str | None:
+    """Read an element attribute without raising."""
+    get_attribute = getattr(element, "get_attribute", None)
+    if get_attribute is None:
+        return None
+
+    try:
+        value = get_attribute(name)
+    except Exception:
+        return None
+
+    if value is None:
+        return None
+    return str(value).strip() or None
+
+
+def _find_first_child_text(element: Any, selectors: list[str]) -> str | None:
+    """Find first visible child text from candidate selectors."""
+    for selector in selectors:
+        for child in _find_child_elements(element, selector):
+            if not _is_visible(child):
+                continue
+            text = _element_text(child)
+            if text:
+                return text
+    return None
+
+
+def _find_first_href(element: Any, selectors: list[str]) -> str | None:
+    """Find first visible href from a result card."""
+    href = _element_attr(element, "href")
+    if href:
+        return href
+
+    for selector in selectors:
+        for child in _find_child_elements(element, selector):
+            if not _is_visible(child):
+                continue
+            href = _element_attr(child, "href")
+            if href:
+                return href
+    return None
+
+
+def _fallback_title_from_card(element: Any) -> str | None:
+    """Use the first visible line from a result card as a title fallback."""
+    for line in _element_text(element).splitlines():
+        title = line.strip()
+        if title:
+            return title
+    return None
+
+
+def _extract_visible_metrics(element: Any) -> dict:
+    """Extract visible metric text from a result card."""
+    metrics: list[str] = []
     seen: set[str] = set()
-    for selector in RESULT_ITEM_SELECTORS:
-        for element in _find_elements(driver, selector):
-            text = (getattr(element, "text", "") or "").strip()
+    for selector in RESULT_METRIC_SELECTORS:
+        for child in _find_child_elements(element, selector):
+            if not _is_visible(child):
+                continue
+            text = _element_text(child)
             if not text or text in seen:
                 continue
             seen.add(text)
-            items.append({"rank": len(items) + 1, "title": text})
-            if len(items) >= limit:
-                return items
-    return items
+            metrics.append(text)
+
+    if not metrics:
+        return {}
+    return {"text": " | ".join(metrics)}
+
+
+def extract_visible_results(driver: Any, limit: int) -> list[dict]:
+    """Extract visible search result cards from the current DOM."""
+    if limit <= 0:
+        return []
+
+    results: list[dict] = []
+    seen_cards: set[int] = set()
+    seen_urls: set[str] = set()
+
+    for selector in RESULT_CARD_SELECTORS:
+        for card in _find_elements(driver, selector):
+            if not _is_visible(card):
+                continue
+
+            card_key = id(card)
+            if card_key in seen_cards:
+                continue
+            seen_cards.add(card_key)
+
+            note_url = _find_first_href(card, RESULT_LINK_SELECTORS)
+            if note_url and note_url in seen_urls:
+                continue
+            if note_url:
+                seen_urls.add(note_url)
+
+            title = _find_first_child_text(card, RESULT_TITLE_SELECTORS)
+            if title is None:
+                title = _fallback_title_from_card(card)
+
+            results.append(
+                {
+                    "rank": len(results) + 1,
+                    "title": title,
+                    "author": _find_first_child_text(card, RESULT_AUTHOR_SELECTORS),
+                    "note_url": note_url,
+                    "visible_metrics": _extract_visible_metrics(card),
+                }
+            )
+
+            if len(results) >= limit:
+                return results
+
+    return results
 
 
 def _safe_capture(provider: BrowserProvider, session: BrowserSession, name: str) -> str | None:
@@ -226,7 +358,16 @@ def search_xhs_keyword(
                 name="search_success",
             )
 
-        items = _extract_visible_items(driver, job.limit)
+        try:
+            items = extract_visible_results(driver, job.limit)
+        except Exception as exc:
+            items = []
+            _log_step(
+                job_id=job.job_id,
+                step="extract_visible_results",
+                status=STATUS_FAILED,
+                message=str(exc),
+            )
         _log_step(
             job_id=job.job_id,
             step="search_success",

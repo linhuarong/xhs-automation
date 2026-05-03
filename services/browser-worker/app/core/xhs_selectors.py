@@ -57,8 +57,13 @@ RESULT_AREA_SELECTORS = [
     "section",
 ]
 
-RESULT_ITEM_SELECTORS = [
+RESULT_CARD_SELECTORS = [
     "[class*='note-item']",
+    "[class*='note-card']",
+    "[class*='feed-card']",
+    "[class*='search-item']",
+    "[class*='cover']",
+    "[data-testid*='note']",
     "[class*='search-result']",
     "[class*='feeds-container'] section",
     "[class*='feeds-page'] section",
@@ -68,3 +73,37 @@ RESULT_ITEM_SELECTORS = [
     "a[href*='/explore/']",
     "section",
 ]
+
+RESULT_TITLE_SELECTORS = [
+    "[class*='title']",
+    "[class*='name']",
+    "[class*='desc']",
+    "[class*='content']",
+    "a[href*='/explore/']",
+    "span",
+]
+
+RESULT_AUTHOR_SELECTORS = [
+    "[class*='author']",
+    "[class*='user']",
+    "[class*='nickname']",
+    "[class*='name']",
+    "a[href*='/user/']",
+]
+
+RESULT_LINK_SELECTORS = [
+    "a[href*='/explore/']",
+    "a[href*='/search_result/']",
+    "a[href]",
+]
+
+RESULT_METRIC_SELECTORS = [
+    "[class*='like']",
+    "[class*='count']",
+    "[class*='comment']",
+    "[class*='collect']",
+    "[class*='interaction']",
+    "[class*='engage']",
+]
+
+RESULT_ITEM_SELECTORS = RESULT_CARD_SELECTORS

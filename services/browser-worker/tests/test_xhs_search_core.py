@@ -1,7 +1,7 @@
 from typing import Any
 
-from app.core.xhs_selectors import SEARCH_INPUT_SELECTORS
-from app.core.xhs_search_core import search_xhs_keyword
+from app.core.xhs_selectors import RESULT_CARD_SELECTORS, SEARCH_INPUT_SELECTORS
+from app.core.xhs_search_core import extract_visible_results, search_xhs_keyword
 from app.providers.base import BrowserProvider, BrowserSession
 from app.schemas import (
     STATUS_FAILED,
@@ -13,9 +13,17 @@ from app.utils import ELEMENT_NOT_FOUND, WAITING_HUMAN_VERIFICATION
 
 
 class FakeElement:
-    def __init__(self, text: str = "", displayed: bool = True) -> None:
+    def __init__(
+        self,
+        text: str = "",
+        displayed: bool = True,
+        children_by_selector: dict[str, list["FakeElement"]] | None = None,
+        attributes: dict[str, str] | None = None,
+    ) -> None:
         self.text = text
         self.displayed = displayed
+        self.children_by_selector = children_by_selector or {}
+        self.attributes = attributes or {}
         self.calls: list[str] = []
 
     def is_displayed(self) -> bool:
@@ -26,6 +34,12 @@ class FakeElement:
 
     def send_keys(self, value: str) -> None:
         self.calls.append(f"send_keys:{value}")
+
+    def find_elements(self, by: str, selector: str) -> list["FakeElement"]:
+        return self.children_by_selector.get(selector, [])
+
+    def get_attribute(self, name: str) -> str | None:
+        return self.attributes.get(name)
 
 
 class FakeDriver:
@@ -88,6 +102,86 @@ def _search_job() -> SearchJob:
     )
 
 
+def _result_card(
+    title: str | None = None,
+    author: str | None = None,
+    href: str | None = None,
+    metric: str | None = None,
+    text: str = "",
+) -> FakeElement:
+    children: dict[str, list[FakeElement]] = {}
+    if title is not None:
+        children["[class*='title']"] = [FakeElement(text=title)]
+    if author is not None:
+        children["[class*='author']"] = [FakeElement(text=author)]
+    if href is not None:
+        children["a[href*='/explore/']"] = [
+            FakeElement(text=title or "", attributes={"href": href})
+        ]
+    if metric is not None:
+        children["[class*='like']"] = [FakeElement(text=metric)]
+    return FakeElement(text=text, children_by_selector=children)
+
+
+def test_extract_visible_results_respects_limit() -> None:
+    cards = [
+        _result_card(
+            title="first title",
+            author="author one",
+            href="https://www.xiaohongshu.com/explore/1",
+            metric="12 likes",
+        ),
+        _result_card(
+            title="second title",
+            author="author two",
+            href="https://www.xiaohongshu.com/explore/2",
+            metric="34 likes",
+        ),
+        _result_card(
+            title="third title",
+            author="author three",
+            href="https://www.xiaohongshu.com/explore/3",
+            metric="56 likes",
+        ),
+    ]
+    driver = FakeDriver({RESULT_CARD_SELECTORS[0]: cards})
+
+    results = extract_visible_results(driver, limit=2)
+
+    assert results == [
+        {
+            "rank": 1,
+            "title": "first title",
+            "author": "author one",
+            "note_url": "https://www.xiaohongshu.com/explore/1",
+            "visible_metrics": {"text": "12 likes"},
+        },
+        {
+            "rank": 2,
+            "title": "second title",
+            "author": "author two",
+            "note_url": "https://www.xiaohongshu.com/explore/2",
+            "visible_metrics": {"text": "34 likes"},
+        },
+    ]
+
+
+def test_extract_visible_results_allows_missing_fields() -> None:
+    driver = FakeDriver({RESULT_CARD_SELECTORS[0]: [FakeElement()]})
+
+    results = extract_visible_results(driver, limit=1)
+
+    assert results == [
+        {
+            "rank": 1,
+            "title": None,
+            "author": None,
+            "note_url": None,
+            "visible_metrics": {},
+        }
+    ]
+
+
 def test_search_xhs_keyword_calls_open_profile(monkeypatch) -> None:
     monkeypatch.setattr("app.core.xhs_search_core.time.sleep", lambda _: None)
     search_input = FakeElement()
@@ -104,11 +198,16 @@ def test_search_xhs_keyword_calls_open_profile(monkeypatch) -> None:
 def test_search_xhs_keyword_success_returns_worker_result(monkeypatch) -> None:
     monkeypatch.setattr("app.core.xhs_search_core.time.sleep", lambda _: None)
     search_input = FakeElement()
-    result_item = FakeElement(text="first visible title")
+    result_item = _result_card(
+        title="first visible title",
+        author="author one",
+        href="https://www.xiaohongshu.com/explore/1",
+        metric="12 likes",
+    )
     driver = FakeDriver(
         {
             "input[type='search']": [search_input],
-            "[class*='note-item']": [result_item],
+            RESULT_CARD_SELECTORS[0]: [result_item],
         }
     )
     provider = FakeProvider(driver)
@@ -118,7 +217,15 @@ def test_search_xhs_keyword_success_returns_worker_result(monkeypatch) -> None:
     assert result.status == STATUS_SUCCESS
     assert result.message == "search completed"
     assert result.screenshot_url == ".local_screenshots/session-1/search_success.png"
-    assert result.items == [{"rank": 1, "title": "first visible title"}]
+    assert result.items == [
+        {
+            "rank": 1,
+            "title": "first visible title",
+            "author": "author one",
+            "note_url": "https://www.xiaohongshu.com/explore/1",
+            "visible_metrics": {"text": "12 likes"},
+        }
+    ]
     assert search_input.calls == ["clear", "send_keys:eye shadow", "send_keys:\ue007"]
 
 

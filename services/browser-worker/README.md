@@ -79,6 +79,10 @@ This prototype is only for low-frequency manual validation:
 - After the human completes the browser prompt in the Chrome profile, call `/api/xhs/search` again with the same account profile to retry.
 - If the page still requires manual action, the job returns `waiting_human_verification` again.
 - A successful low-frequency manual run saves `search_success.png` locally.
+- After a successful search, it tries to extract the first `SearchJob.limit` visible result cards.
+- Result extraction only reads the current visible DOM and does not open detail pages or scroll to load more.
+- Extracted fields include `rank`, `title`, `author`, `note_url`, and `visible_metrics` when they are visible on the page.
+- Some fields may be empty until selectors are calibrated against the live page.
 - It does not upload screenshots to MinIO and does not write PostgreSQL or Feishu.
 
 Manual request example after starting the service:
