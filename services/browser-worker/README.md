@@ -38,6 +38,33 @@ Expected response:
 }
 ```
 
+## API Smoke Test
+
+Start the service first. The smoke test script only checks the already-running local service and does not start Uvicorn.
+
+```powershell
+uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+```
+
+In another PowerShell window, run:
+
+```powershell
+.\scripts\smoke_test.ps1
+```
+
+The script checks:
+
+- `GET /health`
+- `POST /api/xhs/search`
+- `POST /api/xhs/publish`
+- `GET /api/xhs/publish/publish-smoke-1`
+
+Expected final output:
+
+```text
+browser-worker smoke test passed
+```
+
 ## Local Chrome Provider Smoke Test
 
 The Selenium Chrome provider is only for local development debugging. It starts a normal local Chrome profile, does not open XHS, and does not visit any external website.
