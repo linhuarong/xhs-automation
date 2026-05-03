@@ -1,9 +1,15 @@
 from typing import Any
 
+from app.core.xhs_selectors import SEARCH_INPUT_SELECTORS
 from app.core.xhs_search_core import search_xhs_keyword
 from app.providers.base import BrowserProvider, BrowserSession
-from app.schemas import STATUS_FAILED, STATUS_SUCCESS, SearchJob
-from app.utils import ELEMENT_NOT_FOUND
+from app.schemas import (
+    STATUS_FAILED,
+    STATUS_SUCCESS,
+    STATUS_WAITING_HUMAN_VERIFICATION,
+    SearchJob,
+)
+from app.utils import ELEMENT_NOT_FOUND, WAITING_HUMAN_VERIFICATION
 
 
 class FakeElement:
@@ -31,11 +37,13 @@ class FakeDriver:
         self.elements_by_selector = elements_by_selector or {}
         self.page_source = page_source
         self.opened_urls: list[str] = []
+        self.searched_selectors: list[str] = []
 
     def get(self, url: str) -> None:
         self.opened_urls.append(url)
 
     def find_elements(self, by: str, selector: str) -> list[FakeElement]:
+        self.searched_selectors.append(selector)
         return self.elements_by_selector.get(selector, [])
 
 
@@ -109,19 +117,41 @@ def test_search_xhs_keyword_success_returns_worker_result(monkeypatch) -> None:
 
     assert result.status == STATUS_SUCCESS
     assert result.message == "search completed"
-    assert result.screenshot_url == ".local_screenshots/session-1/search_result.png"
+    assert result.screenshot_url == ".local_screenshots/session-1/search_success.png"
     assert result.items == [{"rank": 1, "title": "first visible title"}]
+    assert search_input.calls == ["clear", "send_keys:eye shadow", "send_keys:\ue007"]
+
+
+def test_search_xhs_keyword_tries_multiple_selectors_until_success(monkeypatch) -> None:
+    monkeypatch.setattr("app.core.xhs_search_core.time.sleep", lambda _: None)
+    final_selector = SEARCH_INPUT_SELECTORS[-1]
+    search_input = FakeElement()
+    driver = FakeDriver({final_selector: [search_input]})
+    provider = FakeProvider(driver)
+
+    result = search_xhs_keyword(_search_job(), provider)
+
+    input_selector_attempts = [
+        selector for selector in driver.searched_selectors if selector in SEARCH_INPUT_SELECTORS
+    ]
+    assert result.status == STATUS_SUCCESS
+    assert input_selector_attempts == SEARCH_INPUT_SELECTORS
     assert search_input.calls == ["clear", "send_keys:eye shadow", "send_keys:\ue007"]
 
 
 def test_search_xhs_keyword_missing_input_returns_failed(monkeypatch) -> None:
     monkeypatch.setattr("app.core.xhs_search_core.time.sleep", lambda _: None)
-    provider = FakeProvider(FakeDriver())
+    driver = FakeDriver()
+    provider = FakeProvider(driver)
 
     result = search_xhs_keyword(_search_job(), provider)
 
+    input_selector_attempts = [
+        selector for selector in driver.searched_selectors if selector in SEARCH_INPUT_SELECTORS
+    ]
     assert result.status == STATUS_FAILED
     assert result.error_code == ELEMENT_NOT_FOUND
+    assert input_selector_attempts == SEARCH_INPUT_SELECTORS
     assert result.screenshot_url == ".local_screenshots/session-1/search_error.png"
 
 
@@ -132,6 +162,7 @@ def test_search_xhs_keyword_verification_returns_waiting(monkeypatch) -> None:
 
     result = search_xhs_keyword(_search_job(), provider)
 
-    assert result.status == "waiting_human_verification"
-    assert result.error_code == "WAITING_HUMAN_VERIFICATION"
+    assert result.status == STATUS_WAITING_HUMAN_VERIFICATION
+    assert result.error_code == WAITING_HUMAN_VERIFICATION
     assert result.error_message == "login or verification required"
+    assert result.screenshot_url == ".local_screenshots/session-1/search_waiting_human.png"

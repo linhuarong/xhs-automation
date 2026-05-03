@@ -2,7 +2,14 @@ from fastapi import APIRouter
 
 from app.core.xhs_search_core import search_xhs_keyword
 from app.providers import SeleniumChromeProvider
-from app.schemas import STATUS_ACCEPTED, SearchJob, WorkerResult
+from app.schemas import (
+    STATUS_ACCEPTED,
+    STATUS_FAILED,
+    STATUS_SUCCESS,
+    STATUS_WAITING_HUMAN_VERIFICATION,
+    SearchJob,
+    WorkerResult,
+)
 from app.services import job_registry
 
 
@@ -25,10 +32,15 @@ def create_search_job(request: SearchJob) -> WorkerResult:
 
     provider = SeleniumChromeProvider()
     result = search_xhs_keyword(request, provider)
+    current_step = {
+        STATUS_SUCCESS: "search_success",
+        STATUS_FAILED: "search_failed",
+        STATUS_WAITING_HUMAN_VERIFICATION: "waiting_human_verification",
+    }.get(result.status, "search_finished")
     job_registry.update_job(
         request.job_id,
         status=result.status,
-        current_step="search_finished",
+        current_step=current_step,
         message=result.message,
         error_code=result.error_code,
         error_message=result.error_message,

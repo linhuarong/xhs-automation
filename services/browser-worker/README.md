@@ -75,6 +75,10 @@ This prototype is only for low-frequency manual validation:
 - It does not reverse engineer requests, fake XHR/fetch, or bypass login, captcha, QR code, risk control, or second-factor checks.
 - First run may require a human to log in in the local Chrome profile.
 - If login, captcha, verification, or risk control appears, the job returns `waiting_human_verification`.
+- The waiting screenshot is saved locally as `search_waiting_human.png`.
+- After the human completes the browser prompt in the Chrome profile, call `/api/xhs/search` again with the same account profile to retry.
+- If the page still requires manual action, the job returns `waiting_human_verification` again.
+- A successful low-frequency manual run saves `search_success.png` locally.
 - It does not upload screenshots to MinIO and does not write PostgreSQL or Feishu.
 
 Manual request example after starting the service:
