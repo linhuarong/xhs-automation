@@ -1,7 +1,13 @@
 from typing import Any
+from urllib.parse import quote
 
-from app.core.xhs_selectors import RESULT_CARD_SELECTORS, SEARCH_INPUT_SELECTORS
-from app.core.xhs_search_core import extract_visible_results, search_xhs_keyword
+from app.core.xhs_selectors import BODY_TEXT_SELECTOR, RESULT_CARD_SELECTORS, SEARCH_INPUT_SELECTORS
+from app.core.xhs_search_core import (
+    build_search_url,
+    ensure_search_input_keyword,
+    extract_visible_results,
+    search_xhs_keyword,
+)
 from app.providers.base import BrowserProvider, BrowserSession
 from app.schemas import (
     STATUS_FAILED,
@@ -19,21 +25,38 @@ class FakeElement:
         displayed: bool = True,
         children_by_selector: dict[str, list["FakeElement"]] | None = None,
         attributes: dict[str, str] | None = None,
+        clear_raises: bool = False,
     ) -> None:
         self.text = text
         self.displayed = displayed
         self.children_by_selector = children_by_selector or {}
         self.attributes = attributes or {}
+        self.clear_raises = clear_raises
         self.calls: list[str] = []
 
     def is_displayed(self) -> bool:
         return self.displayed
 
+    def click(self) -> None:
+        self.calls.append("click")
+
     def clear(self) -> None:
         self.calls.append("clear")
+        if self.clear_raises:
+            raise RuntimeError("clear failed")
+        self.attributes["value"] = ""
 
-    def send_keys(self, value: str) -> None:
-        self.calls.append(f"send_keys:{value}")
+    def send_keys(self, *values: str) -> None:
+        for value in values:
+            self.calls.append(f"send_keys:{value}")
+            if value == "\ue009a":
+                self.attributes["value"] = ""
+                continue
+            if value == "\ue003":
+                self.attributes["value"] = self.attributes.get("value", "")[:-1]
+                continue
+            if value != "\ue007":
+                self.attributes["value"] = self.attributes.get("value", "") + value
 
     def find_elements(self, by: str, selector: str) -> list["FakeElement"]:
         return self.children_by_selector.get(selector, [])
@@ -59,6 +82,9 @@ class FakeDriver:
     def find_elements(self, by: str, selector: str) -> list[FakeElement]:
         self.searched_selectors.append(selector)
         return self.elements_by_selector.get(selector, [])
+
+    def execute_script(self, *args: Any, **kwargs: Any) -> None:
+        raise AssertionError("execute_script should not be used")
 
 
 class FakeProvider(BrowserProvider):
@@ -100,6 +126,14 @@ def _search_job() -> SearchJob:
         account_id="xhs_dev_01",
         keyword="eye shadow",
     )
+
+
+def test_build_search_url_encodes_keyword_without_undefined() -> None:
+    url = build_search_url("\u773c\u5f71")
+
+    assert "undefined" not in url
+    assert "keyword=" in url
+    assert quote("\u773c\u5f71", safe="") in url
 
 
 def _result_card(
@@ -182,6 +216,50 @@ def test_extract_visible_results_allows_missing_fields() -> None:
     ]
 
 
+def test_ensure_search_input_keyword_replaces_undefined_value() -> None:
+    search_input = FakeElement(attributes={"value": "undefined"})
+
+    ensure_search_input_keyword(search_input, "eye shadow")
+
+    assert search_input.attributes["value"] == "eye shadow"
+    assert search_input.calls == ["click", "clear", "send_keys:eye shadow", "send_keys:\ue007"]
+
+
+def test_ensure_search_input_keyword_replaces_question_marks_value() -> None:
+    search_input = FakeElement(attributes={"value": "??"})
+
+    ensure_search_input_keyword(search_input, "eye shadow")
+
+    assert search_input.attributes["value"] == "eye shadow"
+    assert search_input.calls == ["click", "clear", "send_keys:eye shadow", "send_keys:\ue007"]
+
+
+def test_ensure_search_input_keyword_sends_enter_when_value_matches() -> None:
+    search_input = FakeElement(attributes={"value": "eye shadow"})
+
+    ensure_search_input_keyword(search_input, "eye shadow")
+
+    assert search_input.attributes["value"] == "eye shadow"
+    assert search_input.calls == ["send_keys:\ue007"]
+
+
+def test_ensure_search_input_keyword_falls_back_when_clear_fails() -> None:
+    search_input = FakeElement(attributes={"value": "undefined"}, clear_raises=True)
+
+    ensure_search_input_keyword(search_input, "eye shadow")
+
+    assert search_input.attributes["value"] == "eye shadow"
+    assert search_input.calls == [
+        "click",
+        "clear",
+        "click",
+        "send_keys:\ue009a",
+        "send_keys:\ue003",
+        "send_keys:eye shadow",
+        "send_keys:\ue007",
+    ]
+
+
 def test_search_xhs_keyword_calls_open_profile(monkeypatch) -> None:
     monkeypatch.setattr("app.core.xhs_search_core.time.sleep", lambda _: None)
     search_input = FakeElement()
@@ -192,6 +270,7 @@ def test_search_xhs_keyword_calls_open_profile(monkeypatch) -> None:
 
     assert provider.opened_accounts == ["xhs_dev_01"]
     assert result.status == STATUS_SUCCESS
+    assert quote("eye shadow", safe="") in driver.opened_urls[0]
     assert provider.closed_sessions
 
 
@@ -226,7 +305,49 @@ def test_search_xhs_keyword_success_returns_worker_result(monkeypatch) -> None:
             "visible_metrics": {"text": "12 likes"},
         }
     ]
-    assert search_input.calls == ["clear", "send_keys:eye shadow", "send_keys:\ue007"]
+    assert search_input.calls == ["click", "clear", "send_keys:eye shadow", "send_keys:\ue007"]
+
+
+def test_search_xhs_keyword_does_not_treat_page_source_login_as_waiting(monkeypatch) -> None:
+    monkeypatch.setattr("app.core.xhs_search_core.time.sleep", lambda _: None)
+    search_input = FakeElement()
+    driver = FakeDriver(
+        {"input[type='search']": [search_input]},
+        page_source="\u767b\u5f55",
+    )
+    provider = FakeProvider(driver)
+
+    result = search_xhs_keyword(_search_job(), provider)
+
+    assert result.status == STATUS_SUCCESS
+    assert result.error_code is None
+
+
+def test_search_xhs_keyword_visible_login_prompt_returns_waiting(monkeypatch) -> None:
+    monkeypatch.setattr("app.core.xhs_search_core.time.sleep", lambda _: None)
+    driver = FakeDriver(
+        {BODY_TEXT_SELECTOR: [FakeElement(text="\u8bf7\u5148\u767b\u5f55\u540e\u7ee7\u7eed")]}
+    )
+    provider = FakeProvider(driver)
+
+    result = search_xhs_keyword(_search_job(), provider)
+
+    assert result.status == STATUS_WAITING_HUMAN_VERIFICATION
+    assert result.error_code == WAITING_HUMAN_VERIFICATION
+    assert result.error_message == "login or verification required"
+
+
+def test_search_xhs_keyword_clears_undefined_input_value(monkeypatch) -> None:
+    monkeypatch.setattr("app.core.xhs_search_core.time.sleep", lambda _: None)
+    search_input = FakeElement(attributes={"value": "undefined"})
+    driver = FakeDriver({"input[type='search']": [search_input]})
+    provider = FakeProvider(driver)
+
+    result = search_xhs_keyword(_search_job(), provider)
+
+    assert result.status == STATUS_SUCCESS
+    assert search_input.attributes["value"] == "eye shadow"
+    assert search_input.calls == ["click", "clear", "send_keys:eye shadow", "send_keys:\ue007"]
 
 
 def test_search_xhs_keyword_tries_multiple_selectors_until_success(monkeypatch) -> None:
@@ -243,7 +364,7 @@ def test_search_xhs_keyword_tries_multiple_selectors_until_success(monkeypatch) 
     ]
     assert result.status == STATUS_SUCCESS
     assert input_selector_attempts == SEARCH_INPUT_SELECTORS
-    assert search_input.calls == ["clear", "send_keys:eye shadow", "send_keys:\ue007"]
+    assert search_input.calls == ["click", "clear", "send_keys:eye shadow", "send_keys:\ue007"]
 
 
 def test_search_xhs_keyword_missing_input_returns_failed(monkeypatch) -> None:
@@ -264,7 +385,9 @@ def test_search_xhs_keyword_missing_input_returns_failed(monkeypatch) -> None:
 
 def test_search_xhs_keyword_verification_returns_waiting(monkeypatch) -> None:
     monkeypatch.setattr("app.core.xhs_search_core.time.sleep", lambda _: None)
-    driver = FakeDriver(page_source="\u8bf7\u5148\u767b\u5f55\u540e\u7ee7\u7eed")
+    driver = FakeDriver(
+        {BODY_TEXT_SELECTOR: [FakeElement(text="\u8bf7\u5148\u767b\u5f55\u540e\u7ee7\u7eed")]}
+    )
     provider = FakeProvider(driver)
 
     result = search_xhs_keyword(_search_job(), provider)

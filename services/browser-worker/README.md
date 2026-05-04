@@ -67,14 +67,18 @@ browser-worker smoke test passed
 
 ## XHS Search Prototype
 
-`POST /api/xhs/search` now runs a minimal real-browser search prototype through the local Selenium Chrome provider. It opens the XHS search page, types the keyword into a visible search input, presses Enter, saves a local screenshot, and returns a `WorkerResult`.
+`POST /api/xhs/search` now runs a minimal real-browser search prototype through the local Selenium Chrome provider. It opens the XHS search page with an encoded `keyword` query parameter, types the keyword into a visible search input, presses Enter, saves a local screenshot, and returns a `WorkerResult`.
 
 This prototype is only for low-frequency manual validation:
 
 - It uses a real browser page and does not call unauthorized XHS APIs.
 - It does not reverse engineer requests, fake XHR/fetch, or bypass login, captcha, QR code, risk control, or second-factor checks.
 - First run may require a human to log in in the local Chrome profile.
-- If login, captcha, verification, or risk control appears, the job returns `waiting_human_verification`.
+- If a visible login, captcha, verification, or risk control prompt appears, the job returns `waiting_human_verification`.
+- The worker checks visible page text and explicit prompt elements; it does not classify a page as waiting only because the HTML source contains generic login text.
+- Chinese keyword requests should be sent as UTF-8 JSON bytes.
+- If the search input contains `undefined`, `??`, an empty value, or a value different from `SearchJob.keyword`, the worker corrects it using only native Selenium element methods: `click`, `clear`, and `send_keys`.
+- If input still fails, check the local `search_error` screenshot and the `input_keyword` structured log first.
 - The waiting screenshot is saved locally as `search_waiting_human.png`.
 - After the human completes the browser prompt in the Chrome profile, call `/api/xhs/search` again with the same account profile to retry.
 - If the page still requires manual action, the job returns `waiting_human_verification` again.

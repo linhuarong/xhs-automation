@@ -1,8 +1,11 @@
 import time
 from typing import Any
+from urllib.parse import quote
 
 from app.core.xhs_selectors import (
+    BODY_TEXT_SELECTOR,
     HUMAN_REQUIRED_SELECTORS,
+    HUMAN_REQUIRED_TEXTS,
     RESULT_AREA_SELECTORS,
     RESULT_AUTHOR_SELECTORS,
     RESULT_CARD_SELECTORS,
@@ -30,8 +33,16 @@ from app.utils import (
 )
 
 ENTER_KEY = "\ue007"
+CTRL_A_KEYS = "\ue009a"
+BACKSPACE_KEY = "\ue003"
 PAGE_LOAD_WAIT_SECONDS = 2
 RESULT_WAIT_SECONDS = 2
+
+
+def build_search_url(keyword: str) -> str:
+    """Build an XHS search URL with an encoded keyword."""
+    encoded_keyword = quote(keyword or "", safe="")
+    return f"{XHS_SEARCH_URL}?keyword={encoded_keyword}"
 
 
 def _find_elements(driver: Any, selector: str) -> list[Any]:
@@ -69,17 +80,34 @@ def _is_visible(element: Any) -> bool:
 def _has_visible_element(driver: Any, selectors: list[str]) -> bool:
     """Return whether any selector has a visible element."""
     for selector in selectors:
-        if selector.startswith("text="):
-            text = selector.removeprefix("text=")
-            page_source = getattr(driver, "page_source", "") or ""
-            if text in page_source:
-                return True
-            continue
-
         for element in _find_elements(driver, selector):
             if _is_visible(element):
                 return True
     return False
+
+
+def _visible_body_text(driver: Any) -> str:
+    """Read visible body text without using page source."""
+    body_elements = _find_elements(driver, BODY_TEXT_SELECTOR)
+    if not body_elements:
+        return ""
+
+    visible_text: list[str] = []
+    for element in body_elements:
+        if _is_visible(element):
+            text = _element_text(element)
+            if text:
+                visible_text.append(text)
+    return "\n".join(visible_text)
+
+
+def _requires_human_verification(driver: Any) -> bool:
+    """Return whether visible page content clearly requires human action."""
+    body_text = _visible_body_text(driver)
+    if any(text in body_text for text in HUMAN_REQUIRED_TEXTS):
+        return True
+
+    return _has_visible_element(driver, HUMAN_REQUIRED_SELECTORS)
 
 
 def _find_first_element(driver: Any, selectors: list[str]) -> tuple[Any | None, str | None]:
@@ -89,6 +117,33 @@ def _find_first_element(driver: Any, selectors: list[str]) -> tuple[Any | None, 
             if _is_visible(element):
                 return element, selector
     return None, None
+
+
+def _input_value(search_input: Any) -> str | None:
+    """Read the current search input value."""
+    return _element_attr(search_input, "value")
+
+
+def ensure_search_input_keyword(search_input: Any, keyword: str) -> None:
+    """Ensure the search input contains the keyword using native element methods."""
+    current_value = (_input_value(search_input) or "").strip()
+    needs_input = current_value in {"", "undefined", "??"} or current_value != keyword
+
+    if not needs_input:
+        search_input.send_keys(ENTER_KEY)
+        return
+
+    search_input.click()
+    try:
+        search_input.clear()
+        search_input.send_keys(keyword)
+    except Exception:
+        search_input.click()
+        search_input.send_keys(CTRL_A_KEYS)
+        search_input.send_keys(BACKSPACE_KEY)
+        search_input.send_keys(keyword)
+
+    search_input.send_keys(ENTER_KEY)
 
 
 def _element_text(element: Any) -> str:
@@ -271,12 +326,13 @@ def search_xhs_keyword(
             ) from exc
 
         driver = provider.get_driver(session)
-        _log_step(job_id=job.job_id, step="open_search_page", extra={"url": XHS_SEARCH_URL})
-        driver.get(XHS_SEARCH_URL)
+        search_url = build_search_url(job.keyword)
+        _log_step(job_id=job.job_id, step="open_search_page", extra={"url": search_url})
+        driver.get(search_url)
         time.sleep(PAGE_LOAD_WAIT_SECONDS)
 
         _log_step(job_id=job.job_id, step="check_human_required")
-        if _has_visible_element(driver, HUMAN_REQUIRED_SELECTORS):
+        if _requires_human_verification(driver):
             screenshot_path = _capture_with_log(
                 job_id=job.job_id,
                 provider=provider,
@@ -317,15 +373,13 @@ def search_xhs_keyword(
             step="input_keyword",
             extra={"matched_selector": matched_selector},
         )
-        search_input.clear()
-        search_input.send_keys(job.keyword)
-        search_input.send_keys(ENTER_KEY)
+        ensure_search_input_keyword(search_input, job.keyword)
 
         _log_step(job_id=job.job_id, step="wait_results")
         time.sleep(RESULT_WAIT_SECONDS)
 
         _log_step(job_id=job.job_id, step="check_human_required")
-        if _has_visible_element(driver, HUMAN_REQUIRED_SELECTORS):
+        if _requires_human_verification(driver):
             screenshot_path = _capture_with_log(
                 job_id=job.job_id,
                 provider=provider,
