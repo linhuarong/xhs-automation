@@ -86,7 +86,10 @@ This prototype is only for low-frequency manual validation:
 - After a successful search, it tries to extract the first `SearchJob.limit` visible result cards.
 - Result extraction only reads the current visible DOM and does not open detail pages or scroll to load more.
 - Extracted fields include `rank`, `title`, `author`, `note_url`, and `visible_metrics` when they are visible on the page.
+- Returned `items` are cleaned and filtered before ranking: `title` and `author` are whitespace-normalized, `visible_metrics` defaults to `{}`, and invalid cards are removed.
+- `note_url` is the key validity signal for a note item. It must point to an XHS `/explore/...` or `/search_result/...` path; home pages, bare search pages, empty links, and non-XHS links are filtered out.
 - Some fields may be empty until selectors are calibrated against the live page.
+- More precise `title` and `author` extraction should be handled by a later selector calibration task.
 - It does not upload screenshots to MinIO and does not write PostgreSQL or Feishu.
 
 Manual request example after starting the service:

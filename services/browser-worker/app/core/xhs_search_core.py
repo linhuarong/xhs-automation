@@ -1,6 +1,7 @@
+import re
 import time
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 
 from app.core.xhs_selectors import (
     BODY_TEXT_SELECTOR,
@@ -37,12 +38,82 @@ CTRL_A_KEYS = "\ue009a"
 BACKSPACE_KEY = "\ue003"
 PAGE_LOAD_WAIT_SECONDS = 2
 RESULT_WAIT_SECONDS = 2
+CONTROL_CHAR_PATTERN = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+WHITESPACE_PATTERN = re.compile(r"\s+")
 
 
 def build_search_url(keyword: str) -> str:
     """Build an XHS search URL with an encoded keyword."""
     encoded_keyword = quote(keyword or "", safe="")
     return f"{XHS_SEARCH_URL}?keyword={encoded_keyword}"
+
+
+def clean_text(value: str | None) -> str | None:
+    """Clean visible text from a search result field."""
+    if value is None:
+        return None
+
+    text = CONTROL_CHAR_PATTERN.sub("", str(value))
+    text = WHITESPACE_PATTERN.sub(" ", text).strip()
+    return text or None
+
+
+def _parse_note_url(url: str | None):
+    """Parse a note URL, accepting common schemeless XHS URLs."""
+    cleaned_url = clean_text(url)
+    if cleaned_url is None:
+        return None
+
+    if cleaned_url.startswith("//"):
+        cleaned_url = f"https:{cleaned_url}"
+    elif cleaned_url.startswith("xiaohongshu.com/") or cleaned_url.startswith(
+        "www.xiaohongshu.com/"
+    ):
+        cleaned_url = f"https://{cleaned_url}"
+
+    return urlparse(cleaned_url)
+
+
+def is_valid_note_url(url: str | None) -> bool:
+    """Return whether a URL points to an XHS note-like page."""
+    parsed = _parse_note_url(url)
+    if parsed is None:
+        return False
+
+    hostname = (parsed.hostname or "").lower()
+    if hostname != "xiaohongshu.com" and not hostname.endswith(".xiaohongshu.com"):
+        return False
+
+    path = parsed.path.rstrip("/")
+    if path in {"", "/", "/search_result"}:
+        return False
+
+    return path.startswith("/search_result/") or path.startswith("/explore/")
+
+
+def normalize_search_item(raw_item: dict, rank: int) -> dict | None:
+    """Normalize and validate one extracted search item."""
+    note_url = clean_text(raw_item.get("note_url"))
+    if not is_valid_note_url(note_url):
+        return None
+
+    visible_metrics = raw_item.get("visible_metrics")
+    if not isinstance(visible_metrics, dict):
+        visible_metrics = {}
+
+    cleaned_metrics: dict = {}
+    for key, value in visible_metrics.items():
+        cleaned_value = clean_text(value) if isinstance(value, str) else value
+        if cleaned_value is not None:
+            cleaned_metrics[key] = cleaned_value
+
+    return {
+        "rank": rank,
+        "title": clean_text(raw_item.get("title")),
+        "author": clean_text(raw_item.get("author")),
+        "note_url": note_url,
+        "visible_metrics": cleaned_metrics,
+    }
 
 
 def _find_elements(driver: Any, selector: str) -> list[Any]:
@@ -148,7 +219,7 @@ def ensure_search_input_keyword(search_input: Any, keyword: str) -> None:
 
 def _element_text(element: Any) -> str:
     """Read normalized visible text from an element."""
-    return (getattr(element, "text", "") or "").strip()
+    return clean_text(getattr(element, "text", "") or "") or ""
 
 
 def _element_attr(element: Any, name: str) -> str | None:
@@ -198,7 +269,7 @@ def _find_first_href(element: Any, selectors: list[str]) -> str | None:
 def _fallback_title_from_card(element: Any) -> str | None:
     """Use the first visible line from a result card as a title fallback."""
     for line in _element_text(element).splitlines():
-        title = line.strip()
+        title = clean_text(line)
         if title:
             return title
     return None
@@ -212,7 +283,7 @@ def _extract_visible_metrics(element: Any) -> dict:
         for child in _find_child_elements(element, selector):
             if not _is_visible(child):
                 continue
-            text = _element_text(child)
+            text = clean_text(_element_text(child))
             if not text or text in seen:
                 continue
             seen.add(text)
@@ -243,24 +314,27 @@ def extract_visible_results(driver: Any, limit: int) -> list[dict]:
             seen_cards.add(card_key)
 
             note_url = _find_first_href(card, RESULT_LINK_SELECTORS)
-            if note_url and note_url in seen_urls:
-                continue
-            if note_url:
-                seen_urls.add(note_url)
 
             title = _find_first_child_text(card, RESULT_TITLE_SELECTORS)
             if title is None:
                 title = _fallback_title_from_card(card)
 
-            results.append(
-                {
-                    "rank": len(results) + 1,
-                    "title": title,
-                    "author": _find_first_child_text(card, RESULT_AUTHOR_SELECTORS),
-                    "note_url": note_url,
-                    "visible_metrics": _extract_visible_metrics(card),
-                }
-            )
+            raw_item = {
+                "title": title,
+                "author": _find_first_child_text(card, RESULT_AUTHOR_SELECTORS),
+                "note_url": note_url,
+                "visible_metrics": _extract_visible_metrics(card),
+            }
+
+            item = normalize_search_item(raw_item, rank=len(results) + 1)
+            if item is None:
+                continue
+
+            if item["note_url"] in seen_urls:
+                continue
+            seen_urls.add(item["note_url"])
+
+            results.append(item)
 
             if len(results) >= limit:
                 return results

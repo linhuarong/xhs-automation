@@ -4,8 +4,11 @@ from urllib.parse import quote
 from app.core.xhs_selectors import BODY_TEXT_SELECTOR, RESULT_CARD_SELECTORS, SEARCH_INPUT_SELECTORS
 from app.core.xhs_search_core import (
     build_search_url,
+    clean_text,
     ensure_search_input_keyword,
     extract_visible_results,
+    is_valid_note_url,
+    normalize_search_item,
     search_xhs_keyword,
 )
 from app.providers.base import BrowserProvider, BrowserSession
@@ -136,6 +139,65 @@ def test_build_search_url_encodes_keyword_without_undefined() -> None:
     assert quote("\u773c\u5f71", safe="") in url
 
 
+def test_clean_text_normalizes_spaces_and_empty_values() -> None:
+    assert clean_text("  title\twith\nspaces  ") == "title with spaces"
+    assert clean_text("\x00a\x1fb") == "ab"
+    assert clean_text("") is None
+    assert clean_text(" \n\t ") is None
+    assert clean_text(None) is None
+
+
+def test_is_valid_note_url() -> None:
+    assert is_valid_note_url("xiaohongshu.com/search_result/abc") is True
+    assert is_valid_note_url("https://www.xiaohongshu.com/explore/abc") is True
+    assert is_valid_note_url("https://xiaohongshu.com/search_result") is False
+    assert is_valid_note_url("https://example.com/explore/abc") is False
+    assert is_valid_note_url("") is False
+
+
+def test_normalize_search_item_returns_standard_item() -> None:
+    item = normalize_search_item(
+        {
+            "title": "  first\n title ",
+            "author": "\t author one ",
+            "note_url": "https://www.xiaohongshu.com/explore/abc",
+            "visible_metrics": {"text": "  12\nlikes "},
+        },
+        rank=3,
+    )
+
+    assert item == {
+        "rank": 3,
+        "title": "first title",
+        "author": "author one",
+        "note_url": "https://www.xiaohongshu.com/explore/abc",
+        "visible_metrics": {"text": "12 likes"},
+    }
+
+
+def test_normalize_search_item_filters_invalid_url() -> None:
+    assert normalize_search_item({"note_url": "https://example.com/a"}, rank=1) is None
+
+
+def test_normalize_search_item_keeps_empty_title_with_valid_url() -> None:
+    item = normalize_search_item(
+        {
+            "title": "",
+            "author": None,
+            "note_url": "https://www.xiaohongshu.com/explore/abc",
+        },
+        rank=1,
+    )
+
+    assert item == {
+        "rank": 1,
+        "title": None,
+        "author": None,
+        "note_url": "https://www.xiaohongshu.com/explore/abc",
+        "visible_metrics": {},
+    }
+
+
 def _result_card(
     title: str | None = None,
     author: str | None = None,
@@ -200,8 +262,14 @@ def test_extract_visible_results_respects_limit() -> None:
     ]
 
 
-def test_extract_visible_results_allows_missing_fields() -> None:
-    driver = FakeDriver({RESULT_CARD_SELECTORS[0]: [FakeElement()]})
+def test_extract_visible_results_allows_missing_title_and_author() -> None:
+    driver = FakeDriver(
+        {
+            RESULT_CARD_SELECTORS[0]: [
+                _result_card(href="https://www.xiaohongshu.com/explore/abc")
+            ]
+        }
+    )
 
     results = extract_visible_results(driver, limit=1)
 
@@ -210,9 +278,38 @@ def test_extract_visible_results_allows_missing_fields() -> None:
             "rank": 1,
             "title": None,
             "author": None,
-            "note_url": None,
+            "note_url": "https://www.xiaohongshu.com/explore/abc",
             "visible_metrics": {},
         }
+    ]
+
+
+def test_extract_visible_results_filters_invalid_cards_and_reranks() -> None:
+    cards = [
+        _result_card(title="invalid", href="https://example.com/explore/bad"),
+        _result_card(title="valid one", href="https://www.xiaohongshu.com/explore/one"),
+        _result_card(title="search page", href="https://www.xiaohongshu.com/search_result"),
+        _result_card(title="valid two", href="https://www.xiaohongshu.com/search_result/two"),
+    ]
+    driver = FakeDriver({RESULT_CARD_SELECTORS[0]: cards})
+
+    results = extract_visible_results(driver, limit=5)
+
+    assert results == [
+        {
+            "rank": 1,
+            "title": "valid one",
+            "author": None,
+            "note_url": "https://www.xiaohongshu.com/explore/one",
+            "visible_metrics": {},
+        },
+        {
+            "rank": 2,
+            "title": "valid two",
+            "author": None,
+            "note_url": "https://www.xiaohongshu.com/search_result/two",
+            "visible_metrics": {},
+        },
     ]
 
 
