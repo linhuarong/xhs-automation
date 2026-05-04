@@ -34,7 +34,9 @@ def test_worker_result_success_status() -> None:
         job_id="result-test-1",
         status=STATUS_SUCCESS,
         evidence_json_path=".local_evidence/result-test-1/search_evidence.json",
+        normalized_records=[{"rank": 1, "note_id": "abc"}],
     )
 
     assert result.status == "success"
     assert result.evidence_json_path == ".local_evidence/result-test-1/search_evidence.json"
+    assert result.normalized_records == [{"rank": 1, "note_id": "abc"}]

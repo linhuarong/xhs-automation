@@ -8,14 +8,18 @@ from app.core import xhs_search_core
 from app.core.xhs_selectors import BODY_TEXT_SELECTOR, RESULT_CARD_SELECTORS, SEARCH_INPUT_SELECTORS
 from app.core.xhs_search_core import (
     build_search_url,
+    build_normalized_search_records,
     build_search_evidence,
     clean_text,
     ensure_search_input_keyword,
+    extract_note_id,
     extract_visible_results,
     is_valid_note_url,
     normalize_search_item,
+    normalize_visible_metrics,
     save_search_evidence,
     search_xhs_keyword,
+    split_author_and_published_at,
 )
 from app.providers.base import BrowserProvider, BrowserSession
 from app.schemas import (
@@ -166,6 +170,57 @@ def test_is_valid_note_url() -> None:
     assert is_valid_note_url("") is False
 
 
+def test_extract_note_id_from_supported_urls() -> None:
+    assert (
+        extract_note_id(
+            "https://www.xiaohongshu.com/search_result/6884ec110000000013010cb6?xsec_token=abc"
+        )
+        == "6884ec110000000013010cb6"
+    )
+    assert (
+        extract_note_id(
+            "https://www.xiaohongshu.com/explore/6884ec110000000013010cb6?xsec_token=abc"
+        )
+        == "6884ec110000000013010cb6"
+    )
+    assert extract_note_id("https://www.xiaohongshu.com/search_result") is None
+    assert extract_note_id(None) is None
+
+
+def test_split_author_and_published_at() -> None:
+    assert split_author_and_published_at("\u963f\u7f57 2025-07-26") == (
+        "\u963f\u7f57",
+        "2025-07-26",
+    )
+    assert split_author_and_published_at("\u6db5\u6db5biu\u7279\u4ed8 03-18") == (
+        "\u6db5\u6db5biu\u7279\u4ed8",
+        "03-18",
+    )
+    assert split_author_and_published_at("zzd\u6cab\u6cab 2\u5929\u524d") == (
+        "zzd\u6cab\u6cab",
+        "2\u5929\u524d",
+    )
+    assert split_author_and_published_at("\u963f\u7f57") == ("\u963f\u7f57", None)
+    assert split_author_and_published_at(None) == (None, None)
+
+
+def test_normalize_visible_metrics() -> None:
+    assert normalize_visible_metrics({"text": "4075"}) == {
+        "metric_raw_text": "4075",
+        "like_count_text": "4075",
+    }
+    assert normalize_visible_metrics({"text": "\u8d5e 4075"}) == {
+        "metric_raw_text": "\u8d5e 4075",
+        "like_count_text": "4075",
+    }
+    assert normalize_visible_metrics({"text": "1.2\u4e07"}) == {
+        "metric_raw_text": "1.2\u4e07",
+        "like_count_text": "1.2\u4e07",
+    }
+    assert normalize_visible_metrics({}) == {}
+    assert normalize_visible_metrics(None) == {}
+
+
 def test_normalize_search_item_returns_standard_item() -> None:
     item = normalize_search_item(
         {
@@ -248,7 +303,72 @@ def test_build_search_evidence_fields_complete() -> None:
         "item_count": 1,
         "result_area_found": True,
         "items": items,
+        "normalized_record_count": 1,
+        "normalized_records": [
+            {
+                "job_id": "search-evidence-1",
+                "keyword": "\u773c\u5f71",
+                "account_id": "xhs_dev_01",
+                "provider_type": "selenium_chrome",
+                "captured_at": "2026-05-04T00:00:00Z",
+                "rank": 1,
+                "title": "\u773c\u5f71\u6d4b\u8bd5",
+                "author": "author one",
+                "published_at_text": None,
+                "note_id": "abc",
+                "note_url": "https://www.xiaohongshu.com/explore/abc",
+                "metric_raw_text": None,
+                "like_count_text": None,
+                "screenshot_path": ".local_screenshots/session/search_success.png",
+                "evidence_json_path": None,
+            }
+        ],
     }
+
+
+def test_build_normalized_search_records_maps_context_and_fields() -> None:
+    evidence = {
+        "job_id": "search-evidence-1",
+        "keyword": "\u773c\u5f71",
+        "account_id": "xhs_dev_01",
+        "provider_type": "selenium_chrome",
+        "captured_at": "2026-05-04T15:26:34.714550Z",
+        "screenshot_path": ".local_screenshots/session/search_success.png",
+        "items": [
+            {
+                "rank": 8,
+                "title": "\u5bf9\u6bd4 | \u6c38\u8fdc\u4e0d\u8981\u5acc\u5f03\u5927\u5730\u8272\u300a\u666e\u300b",
+                "author": "\u963f\u7f57 2025-07-26",
+                "note_url": "https://www.xiaohongshu.com/search_result/6884ec110000000013010cb6?xsec_token=abc",
+                "visible_metrics": {"text": "4075"},
+            }
+        ],
+    }
+
+    records = build_normalized_search_records(
+        evidence,
+        evidence_json_path=".local_evidence/search-evidence-1/search_evidence.json",
+    )
+
+    assert records == [
+        {
+            "job_id": "search-evidence-1",
+            "keyword": "\u773c\u5f71",
+            "account_id": "xhs_dev_01",
+            "provider_type": "selenium_chrome",
+            "captured_at": "2026-05-04T15:26:34.714550Z",
+            "rank": 1,
+            "title": "\u5bf9\u6bd4 | \u6c38\u8fdc\u4e0d\u8981\u5acc\u5f03\u5927\u5730\u8272\u300a\u666e\u300b",
+            "author": "\u963f\u7f57",
+            "published_at_text": "2025-07-26",
+            "note_id": "6884ec110000000013010cb6",
+            "note_url": "https://www.xiaohongshu.com/search_result/6884ec110000000013010cb6?xsec_token=abc",
+            "metric_raw_text": "4075",
+            "like_count_text": "4075",
+            "screenshot_path": ".local_screenshots/session/search_success.png",
+            "evidence_json_path": ".local_evidence/search-evidence-1/search_evidence.json",
+        }
+    ]
 
 
 def test_save_search_evidence_writes_utf8_json(tmp_path, monkeypatch) -> None:
@@ -268,7 +388,47 @@ def test_save_search_evidence_writes_utf8_json(tmp_path, monkeypatch) -> None:
     assert evidence_path.endswith("search_evidence.json")
     assert "\\u773c" not in evidence_text
     assert "\u773c\u5f71" in evidence_text
-    assert json.loads(evidence_text)["item_count"] == 1
+    saved = json.loads(evidence_text)
+    assert saved["item_count"] == 1
+    assert saved["normalized_record_count"] == 1
+    assert saved["normalized_records"][0]["title"] == "\u4e2d\u6587\u6807\u9898"
+    assert saved["normalized_records"][0]["note_id"] is None
+
+
+def test_save_search_evidence_includes_normalized_records(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(xhs_search_core, "LOCAL_EVIDENCE_ROOT", tmp_path / ".local_evidence")
+    evidence = {
+        "job_id": "search-evidence-records",
+        "keyword": "\u773c\u5f71",
+        "account_id": "xhs_dev_01",
+        "provider_type": "selenium_chrome",
+        "captured_at": "2026-05-04T15:26:34.714550Z",
+        "screenshot_path": ".local_screenshots/session/search_success.png",
+        "item_count": 1,
+        "items": [
+            {
+                "rank": 1,
+                "title": "\u4e2d\u6587\u6807\u9898",
+                "author": "\u6bdb\u6bdb\u70e7\u9152 04-21",
+                "note_url": "https://www.xiaohongshu.com/explore/abc?xsec_token=token",
+                "visible_metrics": {"text": "9934"},
+            }
+        ],
+    }
+
+    evidence_path = save_search_evidence(evidence, "search-evidence-records")
+    saved = json.loads(
+        (tmp_path / ".local_evidence" / "search-evidence-records" / "search_evidence.json").read_text(
+            encoding="utf-8"
+        )
+    )
+
+    assert saved["normalized_record_count"] == 1
+    assert saved["normalized_records"][0]["author"] == "\u6bdb\u6bdb\u70e7\u9152"
+    assert saved["normalized_records"][0]["published_at_text"] == "04-21"
+    assert saved["normalized_records"][0]["note_id"] == "abc"
+    assert saved["normalized_records"][0]["like_count_text"] == "9934"
+    assert saved["normalized_records"][0]["evidence_json_path"] == evidence_path
 
 
 def _result_card(

@@ -93,6 +93,9 @@ This prototype is only for low-frequency manual validation:
 - Successful searches write a local structured evidence file under `.local_evidence/{job_id}/search_evidence.json`.
 - The API returns this path as `evidence_json_path`; `screenshot_url` and `items` remain unchanged.
 - The evidence JSON includes job metadata, keyword, account, provider, UTC capture time, search URL, screenshot path, result-area status, item count, and cleaned items.
+- Evidence JSON also includes `normalized_records`, which is the standard record structure intended for later PostgreSQL and Feishu hotspot-field mapping.
+- `items` remains the cleaned page extraction result. `normalized_records` is the pre-database/pre-writeback structure.
+- In `normalized_records`, `author` text is split into `author` and `published_at_text`, `note_url` is parsed into `note_id`, and `visible_metrics` is normalized into `metric_raw_text` and `like_count_text`.
 - Local evidence files are for development validation only. Later stages should replace this with PostgreSQL, MinIO, and Feishu writeback.
 - It does not upload screenshots to MinIO and does not write PostgreSQL or Feishu.
 
