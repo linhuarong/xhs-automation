@@ -7,8 +7,10 @@
 核心组件：
 - Feishu 多维表：人工审核、任务状态、内容池、关键词池、热点池
 - n8n：工作流编排
-- browser-worker：浏览器模拟执行
-- Selenium / Playwright：浏览器自动化执行层
+- browser-worker：RPA 调度器与 evidence 数据承接器
+- 跨境卫士：账号/店铺浏览器环境启动器
+- 影刀 RPA：小红书页面 UI Flow 执行器
+- Selenium / Playwright：仅保留为本地 debug 或后续辅助验证
 - PostgreSQL：结构化数据存储
 - MinIO：截图、图片、证据文件存储
 - GitHub / Codex：代码管理与 AI 开发协作
@@ -43,6 +45,7 @@
 - 不允许跳过截图留证。
 - 不允许只写代码不写日志。
 - 不允许大范围重构，除非用户明确要求。
+- 小红书搜索/发布主链路应走跨境卫士 + 影刀 RPA；selenium_chrome 和 direct search URL 只能作为本地 debug。
 
 ## 开发要求
 

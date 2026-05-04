@@ -18,4 +18,5 @@ class WorkerResult(BaseModel):
     screenshot_url: str | None = None
     note_url: str | None = None
     evidence_json_path: str | None = None
+    normalized_records: list[dict] | None = None
     items: list[dict] | None = None

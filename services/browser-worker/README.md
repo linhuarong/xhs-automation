@@ -2,7 +2,16 @@
 
 FastAPI skeleton for the browser-worker service.
 
-This service currently provides the minimal FastAPI shell, health check, schemas, and a local development Chrome provider. It does not implement XHS page automation, publishing, search, Feishu, MinIO, or PostgreSQL integration.
+This service currently provides the FastAPI shell, health check, schemas, local evidence handling, optional PostgreSQL writes, and a local development Chrome debug provider.
+
+The project architecture has moved to the RPA V2 design:
+
+- KuaJingVS / 跨境卫士 starts the account or shop browser environment.
+- Yingdao / 影刀 RPA executes the XHS page UI Flow.
+- browser-worker acts as the RPA scheduler and evidence receiver.
+- PostgreSQL, Feishu hotspot pool, and Coze/Dify consume `normalized_records`.
+- `selenium_chrome_provider` is retained only for local debug.
+- Direct search URL is debug-only and should not be treated as the main production path.
 
 ## Local Setup
 
@@ -65,11 +74,34 @@ Expected final output:
 browser-worker smoke test passed
 ```
 
-## XHS Search Prototype
+## RPA V2 Main Path
 
-`POST /api/xhs/search` now runs a minimal real-browser search prototype through the local Selenium Chrome provider. It opens the XHS search page with an encoded `keyword` query parameter, types the keyword into a visible search input, presses Enter, saves a local screenshot, and returns a `WorkerResult`.
+The intended main path for `/api/xhs/search` and `/api/xhs/publish` is:
 
-This prototype is only for low-frequency manual validation:
+```text
+browser-worker
+-> Provider Router
+-> KuaJingVS environment start
+-> Yingdao RPA UI Flow
+-> search_evidence.json / publish_evidence.json
+-> browser-worker reads evidence
+-> WorkerResult
+-> PostgreSQL / Feishu / Coze
+```
+
+Future `provider_type` values:
+
+- `selenium_chrome`: local debug-only.
+- `yingdao_rpa`: call Yingdao directly.
+- `kuaijingvs_yingdao_rpa`: KuaJingVS environment + Yingdao RPA, the intended main path.
+
+`YingdaoService` should own token/config loading, starting an RPA job, querying job status, waiting for completion, and returning output paths. The Yingdao app must output `search_evidence.json` for search jobs. PostgreSQL should read evidence JSON / `normalized_records`, not depend on Selenium `items`.
+
+## Legacy XHS Search Debug Prototype
+
+`POST /api/xhs/search` currently still contains a minimal real-browser debug prototype through the local Selenium Chrome provider. It opens the XHS search page with an encoded `keyword` query parameter, types the keyword into a visible search input, presses Enter, saves a local screenshot, and returns a `WorkerResult`.
+
+This prototype is legacy debug-only and only for low-frequency manual validation:
 
 - It uses a real browser page and does not call unauthorized XHS APIs.
 - It does not reverse engineer requests, fake XHR/fetch, or bypass login, captcha, QR code, risk control, or second-factor checks.
@@ -93,8 +125,12 @@ This prototype is only for low-frequency manual validation:
 - Successful searches write a local structured evidence file under `.local_evidence/{job_id}/search_evidence.json`.
 - The API returns this path as `evidence_json_path`; `screenshot_url` and `items` remain unchanged.
 - The evidence JSON includes job metadata, keyword, account, provider, UTC capture time, search URL, screenshot path, result-area status, item count, and cleaned items.
-- Local evidence files are for development validation only. Later stages should replace this with PostgreSQL, MinIO, and Feishu writeback.
-- It does not upload screenshots to MinIO and does not write PostgreSQL or Feishu.
+- Evidence JSON also includes `normalized_records`, which is the standard record structure intended for later PostgreSQL and Feishu hotspot-field mapping.
+- `items` remains the cleaned page extraction result. `normalized_records` is the pre-database/pre-writeback structure.
+- In `normalized_records`, `author` text is split into `author` and `published_at_text`, `note_url` is parsed into `note_id`, and `visible_metrics` is normalized into `metric_raw_text` and `like_count_text`.
+- Local evidence files are for development validation only.
+- It does not upload screenshots to MinIO and does not write Feishu.
+- The RPA main path should produce the same evidence JSON structure from the Yingdao app.
 
 Manual request example after starting the service:
 
@@ -185,7 +221,7 @@ These helpers do not open websites, use the clipboard, operate OS file picker di
 
 ## Local Chrome Provider Smoke Test
 
-The Selenium Chrome provider is only for local development debugging. It starts a normal local Chrome profile, does not open XHS, and does not visit any external website.
+The Selenium Chrome provider is only for local development debugging. It starts a normal local Chrome profile, does not open XHS by default, and does not visit any external website.
 
 Run this from the `services/browser-worker` directory after installing dependencies:
 

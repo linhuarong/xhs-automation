@@ -43,6 +43,10 @@ PAGE_LOAD_WAIT_SECONDS = 2
 RESULT_WAIT_SECONDS = 2
 CONTROL_CHAR_PATTERN = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 WHITESPACE_PATTERN = re.compile(r"\s+")
+PUBLISHED_AT_PATTERN = re.compile(
+    r"(?P<published_at>(?:\d{4}-\d{2}-\d{2})|(?:\d{2}-\d{2})|(?:\d+\u5929\u524d)|(?:\d+\u5c0f\u65f6\u524d)|(?:\d+\u5206\u949f\u524d)|(?:\u6628\u5929)|(?:\u4eca\u5929)|(?:\u521a\u521a))$"
+)
+METRIC_TEXT_PATTERN = re.compile(r"(?P<metric>\d+(?:\.\d+)?\s*(?:\u4e07|\u5343|w|W)?)")
 BROWSER_WORKER_ROOT = Path(__file__).resolve().parents[2]
 LOCAL_EVIDENCE_ROOT = BROWSER_WORKER_ROOT / ".local_evidence"
 
@@ -96,6 +100,54 @@ def is_valid_note_url(url: str | None) -> bool:
     return path.startswith("/search_result/") or path.startswith("/explore/")
 
 
+def extract_note_id(note_url: str | None) -> str | None:
+    """Extract a note id from a supported XHS note URL."""
+    parsed = _parse_note_url(note_url)
+    if parsed is None:
+        return None
+
+    parts = [part for part in parsed.path.split("/") if part]
+    if len(parts) < 2:
+        return None
+
+    if parts[0] not in {"search_result", "explore"}:
+        return None
+
+    note_id = clean_text(parts[1])
+    return note_id or None
+
+
+def split_author_and_published_at(author_text: str | None) -> tuple[str | None, str | None]:
+    """Split author text into author name and visible publish time text."""
+    text = clean_text(author_text)
+    if text is None:
+        return None, None
+
+    match = PUBLISHED_AT_PATTERN.search(text)
+    if match is None:
+        return text, None
+
+    published_at_text = match.group("published_at")
+    author = clean_text(text[: match.start()])
+    return author, published_at_text
+
+
+def normalize_visible_metrics(visible_metrics: dict | None) -> dict:
+    """Normalize visible metric text for downstream records."""
+    if not isinstance(visible_metrics, dict):
+        return {}
+
+    metric_raw_text = clean_text(visible_metrics.get("text"))
+    if metric_raw_text is None:
+        return {}
+
+    normalized = {"metric_raw_text": metric_raw_text}
+    metric_match = METRIC_TEXT_PATTERN.search(metric_raw_text)
+    if metric_match is not None:
+        normalized["like_count_text"] = clean_text(metric_match.group("metric"))
+    return normalized
+
+
 def normalize_search_item(raw_item: dict, rank: int) -> dict | None:
     """Normalize and validate one extracted search item."""
     note_url = clean_text(raw_item.get("note_url"))
@@ -137,7 +189,7 @@ def build_search_evidence(
     captured_at: str | None = None,
 ) -> dict:
     """Build structured local evidence for a search job."""
-    return {
+    evidence = {
         "job_id": job.job_id,
         "task_type": "xhs_keyword_search",
         "status": status,
@@ -151,6 +203,49 @@ def build_search_evidence(
         "result_area_found": result_area_found,
         "items": items,
     }
+    normalized_records = build_normalized_search_records(evidence)
+    evidence["normalized_record_count"] = len(normalized_records)
+    evidence["normalized_records"] = normalized_records
+    return evidence
+
+
+def build_normalized_search_records(
+    evidence: dict,
+    evidence_json_path: str | None = None,
+) -> list[dict]:
+    """Build normalized records from search evidence items."""
+    records: list[dict] = []
+    items = evidence.get("items") or []
+    if not isinstance(items, list):
+        return records
+
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+
+        note_url = clean_text(item.get("note_url"))
+        author, published_at_text = split_author_and_published_at(item.get("author"))
+        normalized_metrics = normalize_visible_metrics(item.get("visible_metrics"))
+        record = {
+            "job_id": evidence.get("job_id"),
+            "keyword": evidence.get("keyword"),
+            "account_id": evidence.get("account_id"),
+            "provider_type": evidence.get("provider_type"),
+            "captured_at": evidence.get("captured_at"),
+            "rank": len(records) + 1,
+            "title": clean_text(item.get("title")),
+            "author": author,
+            "published_at_text": published_at_text,
+            "note_id": extract_note_id(note_url),
+            "note_url": note_url,
+            "metric_raw_text": normalized_metrics.get("metric_raw_text"),
+            "like_count_text": normalized_metrics.get("like_count_text"),
+            "screenshot_path": evidence.get("screenshot_path"),
+            "evidence_json_path": evidence_json_path,
+        }
+        records.append(record)
+
+    return records
 
 
 def save_search_evidence(evidence: dict, job_id: str) -> str:
@@ -158,6 +253,11 @@ def save_search_evidence(evidence: dict, job_id: str) -> str:
     evidence_dir = LOCAL_EVIDENCE_ROOT / job_id
     evidence_dir.mkdir(parents=True, exist_ok=True)
     evidence_path = evidence_dir / "search_evidence.json"
+    evidence["normalized_records"] = build_normalized_search_records(
+        evidence,
+        evidence_json_path=str(evidence_path),
+    )
+    evidence["normalized_record_count"] = len(evidence["normalized_records"])
     evidence_path.write_text(
         json.dumps(evidence, ensure_ascii=False, indent=2),
         encoding="utf-8",
@@ -554,6 +654,7 @@ def search_xhs_keyword(
             result_area_found=result_area_found,
         )
         evidence_json_path = save_search_evidence(evidence, job.job_id)
+        normalized_records = evidence.get("normalized_records", [])
         _log_step(
             job_id=job.job_id,
             step="search_success",
@@ -571,6 +672,7 @@ def search_xhs_keyword(
             message="search completed",
             screenshot_url=screenshot_path,
             evidence_json_path=evidence_json_path,
+            normalized_records=normalized_records,
             items=items,
         )
 
