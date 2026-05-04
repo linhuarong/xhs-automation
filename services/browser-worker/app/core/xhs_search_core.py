@@ -1,5 +1,8 @@
+import json
 import re
 import time
+from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 from urllib.parse import quote, urlparse
 
@@ -40,6 +43,8 @@ PAGE_LOAD_WAIT_SECONDS = 2
 RESULT_WAIT_SECONDS = 2
 CONTROL_CHAR_PATTERN = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 WHITESPACE_PATTERN = re.compile(r"\s+")
+BROWSER_WORKER_ROOT = Path(__file__).resolve().parents[2]
+LOCAL_EVIDENCE_ROOT = BROWSER_WORKER_ROOT / ".local_evidence"
 
 
 def build_search_url(keyword: str) -> str:
@@ -114,6 +119,50 @@ def normalize_search_item(raw_item: dict, rank: int) -> dict | None:
         "note_url": note_url,
         "visible_metrics": cleaned_metrics,
     }
+
+
+def _utc_now_iso() -> str:
+    """Return current UTC time as an ISO8601 string."""
+    return datetime.now(UTC).isoformat().replace("+00:00", "Z")
+
+
+def build_search_evidence(
+    *,
+    job: SearchJob,
+    status: str,
+    search_url: str,
+    screenshot_path: str | None,
+    items: list[dict],
+    result_area_found: bool,
+    captured_at: str | None = None,
+) -> dict:
+    """Build structured local evidence for a search job."""
+    return {
+        "job_id": job.job_id,
+        "task_type": "xhs_keyword_search",
+        "status": status,
+        "keyword": job.keyword,
+        "account_id": job.account_id,
+        "provider_type": job.provider_type,
+        "captured_at": captured_at or _utc_now_iso(),
+        "search_url": search_url,
+        "screenshot_path": screenshot_path,
+        "item_count": len(items),
+        "result_area_found": result_area_found,
+        "items": items,
+    }
+
+
+def save_search_evidence(evidence: dict, job_id: str) -> str:
+    """Save search evidence JSON locally and return its path."""
+    evidence_dir = LOCAL_EVIDENCE_ROOT / job_id
+    evidence_dir.mkdir(parents=True, exist_ok=True)
+    evidence_path = evidence_dir / "search_evidence.json"
+    evidence_path.write_text(
+        json.dumps(evidence, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    return str(evidence_path)
 
 
 def _find_elements(driver: Any, selector: str) -> list[Any]:
@@ -496,18 +545,32 @@ def search_xhs_keyword(
                 status=STATUS_FAILED,
                 message=str(exc),
             )
+        evidence = build_search_evidence(
+            job=job,
+            status=STATUS_SUCCESS,
+            search_url=search_url,
+            screenshot_path=screenshot_path,
+            items=items,
+            result_area_found=result_area_found,
+        )
+        evidence_json_path = save_search_evidence(evidence, job.job_id)
         _log_step(
             job_id=job.job_id,
             step="search_success",
             status=STATUS_SUCCESS,
             message="search completed",
-            extra={"item_count": len(items), "result_area_found": result_area_found},
+            extra={
+                "item_count": len(items),
+                "result_area_found": result_area_found,
+                "evidence_json_path": evidence_json_path,
+            },
         )
         return WorkerResult(
             job_id=job.job_id,
             status=STATUS_SUCCESS,
             message="search completed",
             screenshot_url=screenshot_path,
+            evidence_json_path=evidence_json_path,
             items=items,
         )
 

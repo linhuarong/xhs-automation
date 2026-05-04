@@ -1,14 +1,20 @@
+import json
 from typing import Any
 from urllib.parse import quote
 
+import pytest
+
+from app.core import xhs_search_core
 from app.core.xhs_selectors import BODY_TEXT_SELECTOR, RESULT_CARD_SELECTORS, SEARCH_INPUT_SELECTORS
 from app.core.xhs_search_core import (
     build_search_url,
+    build_search_evidence,
     clean_text,
     ensure_search_input_keyword,
     extract_visible_results,
     is_valid_note_url,
     normalize_search_item,
+    save_search_evidence,
     search_xhs_keyword,
 )
 from app.providers.base import BrowserProvider, BrowserSession
@@ -123,6 +129,11 @@ class FakeProvider(BrowserProvider):
         self.closed_sessions.append(session)
 
 
+@pytest.fixture(autouse=True)
+def _local_evidence_root(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(xhs_search_core, "LOCAL_EVIDENCE_ROOT", tmp_path / ".local_evidence")
+
+
 def _search_job() -> SearchJob:
     return SearchJob(
         job_id="search-test-1",
@@ -196,6 +207,68 @@ def test_normalize_search_item_keeps_empty_title_with_valid_url() -> None:
         "note_url": "https://www.xiaohongshu.com/explore/abc",
         "visible_metrics": {},
     }
+
+
+def test_build_search_evidence_fields_complete() -> None:
+    items = [
+        {
+            "rank": 1,
+            "title": "\u773c\u5f71\u6d4b\u8bd5",
+            "author": "author one",
+            "note_url": "https://www.xiaohongshu.com/explore/abc",
+            "visible_metrics": {},
+        }
+    ]
+    job = SearchJob(
+        job_id="search-evidence-1",
+        account_id="xhs_dev_01",
+        keyword="\u773c\u5f71",
+    )
+
+    evidence = build_search_evidence(
+        job=job,
+        status=STATUS_SUCCESS,
+        search_url="https://www.xiaohongshu.com/search_result?keyword=x",
+        screenshot_path=".local_screenshots/session/search_success.png",
+        items=items,
+        result_area_found=True,
+        captured_at="2026-05-04T00:00:00Z",
+    )
+
+    assert evidence == {
+        "job_id": "search-evidence-1",
+        "task_type": "xhs_keyword_search",
+        "status": "success",
+        "keyword": "\u773c\u5f71",
+        "account_id": "xhs_dev_01",
+        "provider_type": "selenium_chrome",
+        "captured_at": "2026-05-04T00:00:00Z",
+        "search_url": "https://www.xiaohongshu.com/search_result?keyword=x",
+        "screenshot_path": ".local_screenshots/session/search_success.png",
+        "item_count": 1,
+        "result_area_found": True,
+        "items": items,
+    }
+
+
+def test_save_search_evidence_writes_utf8_json(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(xhs_search_core, "LOCAL_EVIDENCE_ROOT", tmp_path / ".local_evidence")
+    evidence = {
+        "job_id": "search-evidence-utf8",
+        "keyword": "\u773c\u5f71",
+        "item_count": 1,
+        "items": [{"title": "\u4e2d\u6587\u6807\u9898"}],
+    }
+
+    evidence_path = save_search_evidence(evidence, "search-evidence-utf8")
+    evidence_text = (tmp_path / ".local_evidence" / "search-evidence-utf8" / "search_evidence.json").read_text(
+        encoding="utf-8"
+    )
+
+    assert evidence_path.endswith("search_evidence.json")
+    assert "\\u773c" not in evidence_text
+    assert "\u773c\u5f71" in evidence_text
+    assert json.loads(evidence_text)["item_count"] == 1
 
 
 def _result_card(

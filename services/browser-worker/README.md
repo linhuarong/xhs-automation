@@ -90,6 +90,10 @@ This prototype is only for low-frequency manual validation:
 - `note_url` is the key validity signal for a note item. It must point to an XHS `/explore/...` or `/search_result/...` path; home pages, bare search pages, empty links, and non-XHS links are filtered out.
 - Some fields may be empty until selectors are calibrated against the live page.
 - More precise `title` and `author` extraction should be handled by a later selector calibration task.
+- Successful searches write a local structured evidence file under `.local_evidence/{job_id}/search_evidence.json`.
+- The API returns this path as `evidence_json_path`; `screenshot_url` and `items` remain unchanged.
+- The evidence JSON includes job metadata, keyword, account, provider, UTC capture time, search URL, screenshot path, result-area status, item count, and cleaned items.
+- Local evidence files are for development validation only. Later stages should replace this with PostgreSQL, MinIO, and Feishu writeback.
 - It does not upload screenshots to MinIO and does not write PostgreSQL or Feishu.
 
 Manual request example after starting the service:
@@ -98,6 +102,21 @@ Manual request example after starting the service:
 Invoke-RestMethod -Method Post http://127.0.0.1:8000/api/xhs/search `
   -ContentType "application/json" `
   -Body '{"job_id":"search-manual-1","account_id":"xhs_dev_01","keyword":"眼影"}'
+```
+
+For Chinese keywords in PowerShell, send UTF-8 JSON bytes:
+
+```powershell
+$body = '{"job_id":"search-evidence-1","account_id":"xhs_dev_01","keyword":"眼影","limit":5}'
+$result = Invoke-RestMethod -Method Post http://127.0.0.1:8000/api/xhs/search `
+  -ContentType "application/json; charset=utf-8" `
+  -Body ([System.Text.Encoding]::UTF8.GetBytes($body))
+```
+
+PowerShell console rendering may still display Chinese objects incorrectly. To inspect the response, write it to UTF-8 JSON:
+
+```powershell
+$result | ConvertTo-Json -Depth 10 | Set-Content -Encoding utf8 search_result_check.json
 ```
 
 ## Open Local Chrome Profile

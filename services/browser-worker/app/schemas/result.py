@@ -17,4 +17,5 @@ class WorkerResult(BaseModel):
     error_message: str | None = None
     screenshot_url: str | None = None
     note_url: str | None = None
+    evidence_json_path: str | None = None
     items: list[dict] | None = None
