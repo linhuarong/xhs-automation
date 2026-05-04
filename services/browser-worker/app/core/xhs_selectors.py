@@ -1,4 +1,5 @@
 XHS_SEARCH_URL = "https://www.xiaohongshu.com/search_result"
+BODY_TEXT_SELECTOR = "body"
 
 SEARCH_INPUT_SELECTORS = [
     "input[type='search']",
@@ -20,28 +21,30 @@ SEARCH_INPUT_SELECTORS = [
 ]
 
 HUMAN_REQUIRED_SELECTORS = [
-    "[class*='login']",
     "[class*='verify']",
     "[class*='captcha']",
     "[class*='risk']",
-    "[class*='auth']",
-    "[class*='modal']",
     "[class*='security']",
     "[class*='restricted']",
-    "text=\u767b\u5f55",
-    "text=\u8bf7\u5148\u767b\u5f55",
-    "text=\u626b\u7801",
-    "text=\u5b89\u5168\u9a8c\u8bc1",
-    "text=\u5b89\u5168\u786e\u8ba4",
-    "text=\u9a8c\u8bc1\u7801",
-    "text=\u4eba\u673a\u9a8c\u8bc1",
-    "text=\u9a8c\u8bc1",
-    "text=\u8bbf\u95ee\u9891\u7e41",
-    "text=\u64cd\u4f5c\u9891\u7e41",
-    "text=\u8bf7\u7a0d\u540e\u518d\u8bd5",
-    "text=\u98ce\u63a7",
-    "text=\u8d26\u53f7\u5f02\u5e38",
-    "text=\u9875\u9762\u9650\u5236",
+    "[class*='verify-code']",
+    "[class*='captcha-box']",
+]
+
+HUMAN_REQUIRED_TEXTS = [
+    "\u8bf7\u5148\u767b\u5f55",
+    "\u767b\u5f55\u540e\u7ee7\u7eed",
+    "\u626b\u7801\u767b\u5f55",
+    "\u8bf7\u626b\u7801",
+    "\u5b89\u5168\u9a8c\u8bc1",
+    "\u5b89\u5168\u786e\u8ba4",
+    "\u8bf7\u8fdb\u884c\u9a8c\u8bc1",
+    "\u9a8c\u8bc1\u7801",
+    "\u4eba\u673a\u9a8c\u8bc1",
+    "\u8bbf\u95ee\u9891\u7e41",
+    "\u64cd\u4f5c\u9891\u7e41",
+    "\u8bf7\u7a0d\u540e\u518d\u8bd5",
+    "\u8d26\u53f7\u5f02\u5e38",
+    "\u9875\u9762\u9650\u5236",
 ]
 
 LOGIN_OR_VERIFY_SELECTORS = HUMAN_REQUIRED_SELECTORS
