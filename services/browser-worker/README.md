@@ -110,12 +110,12 @@ Yingdao configuration is read from environment variables:
 
 ```powershell
 $env:YINGDAO_API_BASE_URL = "https://api.winrobot360.com"
-$env:YINGDAO_ACCESS_KEY_ID = ""
-$env:YINGDAO_ACCESS_KEY_SECRET = ""
-$env:YINGDAO_ACCOUNT_NAME = ""
-$env:YINGDAO_ROBOT_UUID = ""
-$env:YINGDAO_JOB_POLL_INTERVAL_SECONDS = "2"
-$env:YINGDAO_JOB_TIMEOUT_SECONDS = "300"
+$env:YINGDAO_ACCESS_KEY_ID = "change_me"
+$env:YINGDAO_ACCESS_KEY_SECRET = "change_me"
+$env:YINGDAO_ACCOUNT_NAME = "change_me"
+$env:YINGDAO_ROBOT_UUID = "change_me"
+$env:YINGDAO_JOB_POLL_INTERVAL_SECONDS = "3"
+$env:YINGDAO_JOB_TIMEOUT_SECONDS = "600"
 ```
 
 Manual smoke evidence can be placed under:
@@ -146,12 +146,62 @@ KuaJingVS configuration is read from environment variables:
 
 ```powershell
 $env:KJVS_API_BASE_URL = "http://127.0.0.1:49709"
-$env:KJVS_API_ID = ""
-$env:KJVS_API_SECRET = ""
-$env:KJVS_PROFILE_MAP_PATH = ""
-$env:KJVS_ENV_READY_TIMEOUT_SECONDS = "120"
-$env:KJVS_ENV_POLL_INTERVAL_SECONDS = "2"
+$env:KJVS_API_ID = "change_me"
+$env:KJVS_API_SECRET = "change_me"
+$env:KJVS_PROFILE_MAP_PATH = ".config/kuaijingvs_profiles.json"
+$env:KJVS_ENV_READY_TIMEOUT_SECONDS = "60"
+$env:KJVS_ENV_POLL_INTERVAL_SECONDS = "3"
+$env:RPA_LOCAL_EVIDENCE_ROOT = ".local_evidence"
 ```
+
+## RPA Dry-Run
+
+Task 24E adds a local dry-run check before real KuaJingVS and Yingdao integration. It validates local config, profile map readability, account mapping, Yingdao account/robot settings, and evidence output paths. It does not call Yingdao, does not call KuaJingVS, does not open Chrome, and does not visit XHS.
+
+Run from `services/browser-worker`:
+
+```powershell
+.\scripts\rpa_dry_run.ps1 `
+  -JobId "dry-run-1" `
+  -AccountId "xhs_dev_01" `
+  -Keyword "眼影" `
+  -ProviderType "kuaijingvs_yingdao_rpa"
+```
+
+Expected report shape:
+
+```json
+{
+  "job_id": "dry-run-1",
+  "provider_type": "kuaijingvs_yingdao_rpa",
+  "account_id": "xhs_dev_01",
+  "keyword": "眼影",
+  "status": "success",
+  "checks": [],
+  "resolved": {
+    "shop_id": "123456",
+    "evidence_output_dir": ".local_evidence/dry-run-1",
+    "expected_evidence_json_path": ".local_evidence/dry-run-1/search_evidence.json",
+    "expected_screenshot_path": ".local_evidence/dry-run-1/xhs_search_smoke.png"
+  },
+  "error_code": null,
+  "error_message": null
+}
+```
+
+Profile map example only; do not commit real account data:
+
+```json
+{
+  "xhs_dev_01": {
+    "shop_id": "123456",
+    "shop_name": "小红书测试账号01",
+    "provider_type": "kuaijingvs_yingdao_rpa"
+  }
+}
+```
+
+Before a real local integration run, prepare `KJVS_PROFILE_MAP_PATH`, `YINGDAO_ACCOUNT_NAME`, `YINGDAO_ROBOT_UUID`, a Yingdao app that writes `search_evidence.json`, and matching `evidence_output_dir` behavior. QR code, captcha, safety confirmation, and risk-control prompts still require human handling; the worker must not automate those checks.
 
 ## Legacy XHS Search Debug Prototype
 
