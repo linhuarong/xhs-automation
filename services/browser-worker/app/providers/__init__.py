@@ -4,6 +4,7 @@ from app.providers.base import (
     ReservedProvider,
     UnsupportedProviderError,
 )
+from app.providers.kuaijingvs_local_file_trigger import KuaJingVSLocalFileTriggerProvider
 from app.providers.kuaijingvs_yingdao_rpa import KuaJingVSYingdaoRpaProvider
 from app.providers.selenium_chrome import SeleniumChromeProvider
 from app.providers.yingdao_rpa import YingdaoRpaProvider
@@ -18,6 +19,8 @@ def get_provider(provider_type: str) -> BrowserProvider:
         return YingdaoRpaProvider()
     if normalized_provider_type == "kuaijingvs_yingdao_rpa":
         return KuaJingVSYingdaoRpaProvider()
+    if normalized_provider_type == "kuaijingvs_local_file_trigger":
+        return KuaJingVSLocalFileTriggerProvider()
     if normalized_provider_type == "manual":
         return ReservedProvider(
             provider_type="manual",
@@ -29,6 +32,7 @@ def get_provider(provider_type: str) -> BrowserProvider:
 __all__ = [
     "BrowserProvider",
     "BrowserSession",
+    "KuaJingVSLocalFileTriggerProvider",
     "ReservedProvider",
     "UnsupportedProviderError",
     "KuaJingVSYingdaoRpaProvider",

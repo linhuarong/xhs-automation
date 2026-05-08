@@ -38,5 +38,6 @@ services/browser-worker/.local_profiles/
 services/browser-worker/.local_screenshots/
 services/browser-worker/.local_downloads/
 services/browser-worker/.local_evidence/
+services/browser-worker/.local_rpa_jobs/
 
 services/browser-worker/.config/kuaijingvs_profiles.json

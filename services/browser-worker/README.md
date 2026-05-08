@@ -94,6 +94,7 @@ Current `provider_type` values:
 - `selenium_chrome`: local debug-only.
 - `yingdao_rpa`: directly dispatch Yingdao RPA and read evidence.
 - `kuaijingvs_yingdao_rpa`: open KuaJingVS environment, wait until ready, dispatch Yingdao RPA, then read evidence.
+- `kuaijingvs_local_file_trigger`: open KuaJingVS environment, write a local pending job JSON for Yingdao file trigger, then wait for evidence.
 - `manual`: reserved.
 
 `YingdaoService` should own token/config loading, starting an RPA job, querying job status, waiting for completion, and returning output paths. The Yingdao app must output `search_evidence.json` for search jobs. PostgreSQL should read evidence JSON / `normalized_records`, not depend on Selenium `items`.
@@ -151,8 +152,63 @@ $env:KJVS_API_SECRET = "change_me"
 $env:KJVS_PROFILE_MAP_PATH = ".config/kuaijingvs_profiles.json"
 $env:KJVS_ENV_READY_TIMEOUT_SECONDS = "60"
 $env:KJVS_ENV_POLL_INTERVAL_SECONDS = "3"
+$env:RPA_LOCAL_QUEUE_ROOT = ".local_rpa_jobs"
 $env:RPA_LOCAL_EVIDENCE_ROOT = ".local_evidence"
+$env:RPA_LOCAL_EVIDENCE_TIMEOUT_SECONDS = "300"
+$env:RPA_WRITE_EVIDENCE_SCRIPT_PATH = "scripts/write_yingdao_smoke_evidence.ps1"
 ```
+
+## Local File Trigger RPA
+
+Task 24H adds `provider_type = kuaijingvs_local_file_trigger` for local Yingdao personal-edition workflows that cannot reliably use Yingdao OpenAPI. The worker still uses KuaJingVS for the account environment, but triggers Yingdao by writing a local file that a Yingdao file trigger watches.
+
+Flow:
+
+```text
+/api/xhs/search
+-> Provider Router
+-> KuaJingVSLocalFileTriggerProvider
+-> KuaJingVS resolve/open/wait ready
+-> write .local_rpa_jobs/pending/{job_id}.json
+-> Yingdao file trigger picks up the JSON
+-> Yingdao writes .local_evidence/{job_id}/search_evidence.json
+-> browser-worker reads evidence and returns WorkerResult
+```
+
+The local queue directories are:
+
+```text
+.local_rpa_jobs/
+  pending/
+  processing/
+  done/
+  failed/
+```
+
+Pending search job JSON includes:
+
+- `job_id`
+- `task_type = xhs_keyword_search`
+- `account_id`
+- `provider_type = kuaijingvs_local_file_trigger`
+- `keyword`
+- `limit`
+- `output_dir`
+- `before_scroll_screenshot_path`
+- `expected_evidence_json_path`
+- `expected_screenshot_path`
+- `dos_command`
+- `created_at`
+
+Yingdao should write:
+
+```text
+.local_evidence/{job_id}/xhs_search_before_scroll.png
+.local_evidence/{job_id}/xhs_search_smoke.png
+.local_evidence/{job_id}/search_evidence.json
+```
+
+This mode does not bypass QR code, captcha, safety verification, or risk control. If manual handling is required, Yingdao should write evidence with `status = waiting_human_verification`. The first version is single-job oriented; queue processing order is controlled by the Yingdao file trigger setup.
 
 ## RPA Dry-Run
 
