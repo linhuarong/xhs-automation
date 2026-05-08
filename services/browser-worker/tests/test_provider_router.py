@@ -1,6 +1,7 @@
 import pytest
 
 from app.providers import (
+    KuaJingVSYingdaoRpaProvider,
     ReservedProvider,
     SeleniumChromeProvider,
     UnsupportedProviderError,
@@ -21,10 +22,10 @@ def test_get_provider_selenium_chrome_returns_debug_provider() -> None:
     assert isinstance(provider, SeleniumChromeProvider)
 
 
-def test_get_provider_kuaijingvs_yingdao_rpa_uses_yingdao_alias() -> None:
+def test_get_provider_kuaijingvs_yingdao_rpa_returns_composed_provider() -> None:
     provider = get_provider("kuaijingvs_yingdao_rpa")
 
-    assert isinstance(provider, YingdaoRpaProvider)
+    assert isinstance(provider, KuaJingVSYingdaoRpaProvider)
 
 
 def test_get_provider_manual_returns_reserved_provider() -> None:

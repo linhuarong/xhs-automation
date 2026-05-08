@@ -4,6 +4,7 @@ from app.providers.base import (
     ReservedProvider,
     UnsupportedProviderError,
 )
+from app.providers.kuaijingvs_yingdao_rpa import KuaJingVSYingdaoRpaProvider
 from app.providers.selenium_chrome import SeleniumChromeProvider
 from app.providers.yingdao_rpa import YingdaoRpaProvider
 
@@ -16,10 +17,7 @@ def get_provider(provider_type: str) -> BrowserProvider:
     if normalized_provider_type == "yingdao_rpa":
         return YingdaoRpaProvider()
     if normalized_provider_type == "kuaijingvs_yingdao_rpa":
-        # Task 24A does not implement KuaJingVS OpenAPI yet. For smoke tests,
-        # assume the browser environment has already been opened externally and
-        # let Yingdao read/write evidence through the RPA application.
-        return YingdaoRpaProvider()
+        return KuaJingVSYingdaoRpaProvider()
     if normalized_provider_type == "manual":
         return ReservedProvider(
             provider_type="manual",
@@ -33,6 +31,7 @@ __all__ = [
     "BrowserSession",
     "ReservedProvider",
     "UnsupportedProviderError",
+    "KuaJingVSYingdaoRpaProvider",
     "SeleniumChromeProvider",
     "YingdaoRpaProvider",
     "get_provider",

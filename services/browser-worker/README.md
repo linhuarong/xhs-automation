@@ -89,11 +89,12 @@ browser-worker
 -> PostgreSQL / Feishu / Coze
 ```
 
-Future `provider_type` values:
+Current `provider_type` values:
 
 - `selenium_chrome`: local debug-only.
-- `yingdao_rpa`: call Yingdao directly.
-- `kuaijingvs_yingdao_rpa`: KuaJingVS environment + Yingdao RPA, the intended main path. In Task 24A this is an alias to the Yingdao RPA provider and assumes the KuaJingVS browser environment has already been opened manually or by an external process.
+- `yingdao_rpa`: directly dispatch Yingdao RPA and read evidence.
+- `kuaijingvs_yingdao_rpa`: open KuaJingVS environment, wait until ready, dispatch Yingdao RPA, then read evidence.
+- `manual`: reserved.
 
 `YingdaoService` should own token/config loading, starting an RPA job, querying job status, waiting for completion, and returning output paths. The Yingdao app must output `search_evidence.json` for search jobs. PostgreSQL should read evidence JSON / `normalized_records`, not depend on Selenium `items`.
 
@@ -101,7 +102,7 @@ Task 24A adds the provider router and Yingdao RPA evidence reader:
 
 - `get_provider("selenium_chrome")` returns the local debug provider.
 - `get_provider("yingdao_rpa")` returns `YingdaoRpaProvider`.
-- `get_provider("kuaijingvs_yingdao_rpa")` currently returns `YingdaoRpaProvider` as a smoke-test-friendly alias.
+- `get_provider("kuaijingvs_yingdao_rpa")` returns `KuaJingVSYingdaoRpaProvider`.
 - Unknown provider types raise a clear provider error.
 - Unit tests mock Yingdao calls and do not access real Yingdao, XHS, or Chrome.
 
@@ -137,7 +138,9 @@ Task 24C adds a mockable KuaJingVS service skeleton:
 - `KuaJingVSService` reads account/profile mapping from `KJVS_PROFILE_MAP_PATH`.
 - It defines `list_shops`, `resolve_shop_id`, `open_shop`, `close_shop`, and `wait_environment_ready`.
 - Unit tests mock all HTTP calls and do not access a real KuaJingVS process at `127.0.0.1:49709`.
-- Provider Router is not yet wired to call `KuaJingVSService.open_shop()` before `YingdaoRpaProvider.search()`; that composition is reserved for Task 24D.
+- Task 24D wires Provider Router to `KuaJingVSYingdaoRpaProvider`, which calls `resolve_shop_id`, `open_shop`, `wait_environment_ready`, then delegates to `YingdaoRpaProvider.search`.
+- Task 24D remains mock-tested composition code. Real local integration still requires KuaJingVS, a Yingdao app, `KJVS_PROFILE_MAP_PATH`, `YINGDAO_ROBOT_UUID`, and valid local credentials/config.
+- If XHS shows QR code, captcha, safety confirmation, or risk control, the flow must return `waiting_human_verification`; the worker does not automate those checks.
 
 KuaJingVS configuration is read from environment variables:
 
