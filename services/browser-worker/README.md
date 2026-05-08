@@ -125,6 +125,31 @@ Manual smoke evidence can be placed under:
 
 The RPA evidence reader maps `screenshot_path` to `screenshot_url`, preserves UTF-8 Chinese fields, and returns `items` plus `normalized_records`.
 
+Task 24B hardens the Yingdao service contract:
+
+- Missing `YINGDAO_ACCESS_KEY_ID`, `YINGDAO_ACCESS_KEY_SECRET`, `YINGDAO_ACCOUNT_NAME`, or `YINGDAO_ROBOT_UUID` fails before a real job start.
+- Invalid poll interval or timeout values return explicit configuration errors.
+- `wait_job_done` maps RPA failure and timeout to structured errors.
+- `extract_outputs` accepts common evidence fields such as `evidence_json_path`, `evidence_output_dir`, `output_dir`, `search_evidence_json`, `search_evidence_path`, `screenshot_path`, and `status`.
+
+Task 24C adds a mockable KuaJingVS service skeleton:
+
+- `KuaJingVSService` reads account/profile mapping from `KJVS_PROFILE_MAP_PATH`.
+- It defines `list_shops`, `resolve_shop_id`, `open_shop`, `close_shop`, and `wait_environment_ready`.
+- Unit tests mock all HTTP calls and do not access a real KuaJingVS process at `127.0.0.1:49709`.
+- Provider Router is not yet wired to call `KuaJingVSService.open_shop()` before `YingdaoRpaProvider.search()`; that composition is reserved for Task 24D.
+
+KuaJingVS configuration is read from environment variables:
+
+```powershell
+$env:KJVS_API_BASE_URL = "http://127.0.0.1:49709"
+$env:KJVS_API_ID = ""
+$env:KJVS_API_SECRET = ""
+$env:KJVS_PROFILE_MAP_PATH = ""
+$env:KJVS_ENV_READY_TIMEOUT_SECONDS = "120"
+$env:KJVS_ENV_POLL_INTERVAL_SECONDS = "2"
+```
+
 ## Legacy XHS Search Debug Prototype
 
 `POST /api/xhs/search` currently still contains a minimal real-browser debug prototype through the local Selenium Chrome provider. It opens the XHS search page with an encoded `keyword` query parameter, types the keyword into a visible search input, presses Enter, saves a local screenshot, and returns a `WorkerResult`.

@@ -4,6 +4,13 @@ import time
 from typing import Any
 from urllib import request
 
+from app.utils.errors import (
+    YINGDAO_CONFIG_ERROR,
+    YINGDAO_JOB_FAILED,
+    YINGDAO_JOB_TIMEOUT,
+    WorkerError,
+)
+
 
 class UrllibJsonClient:
     """Small JSON HTTP client used by YingdaoService."""
@@ -58,23 +65,64 @@ class YingdaoService:
         self.access_key_secret = access_key_secret or os.getenv("YINGDAO_ACCESS_KEY_SECRET", "")
         self.account_name = account_name or os.getenv("YINGDAO_ACCOUNT_NAME", "")
         self.robot_uuid = robot_uuid or os.getenv("YINGDAO_ROBOT_UUID", "")
-        self.poll_interval_seconds = float(
-            poll_interval_seconds
-            if poll_interval_seconds is not None
-            else os.getenv("YINGDAO_JOB_POLL_INTERVAL_SECONDS", "2")
+        self.poll_interval_seconds = self._parse_int_config(
+            "YINGDAO_JOB_POLL_INTERVAL_SECONDS",
+            poll_interval_seconds,
+            default=2,
         )
-        self.timeout_seconds = int(
-            timeout_seconds
-            if timeout_seconds is not None
-            else os.getenv("YINGDAO_JOB_TIMEOUT_SECONDS", "300")
+        self.timeout_seconds = self._parse_int_config(
+            "YINGDAO_JOB_TIMEOUT_SECONDS",
+            timeout_seconds,
+            default=300,
         )
         self.http_client = http_client or UrllibJsonClient()
         self._access_token: str | None = None
+
+    def _parse_int_config(
+        self,
+        env_name: str,
+        value: int | float | None,
+        default: int,
+    ) -> int:
+        """Parse integer configuration from an explicit value or environment."""
+        raw_value = value if value is not None else os.getenv(env_name, str(default))
+        try:
+            parsed_value = int(raw_value)
+        except (TypeError, ValueError) as exc:
+            raise WorkerError(
+                error_code=YINGDAO_CONFIG_ERROR,
+                error_message=f"{env_name} must be an integer.",
+                retryable=False,
+            ) from exc
+        if parsed_value < 0:
+            raise WorkerError(
+                error_code=YINGDAO_CONFIG_ERROR,
+                error_message=f"{env_name} must be greater than or equal to 0.",
+                retryable=False,
+            )
+        return parsed_value
+
+    def _require_config(self, values: dict[str, str]) -> None:
+        """Raise a configuration error when required values are empty."""
+        missing = [name for name, value in values.items() if not str(value or "").strip()]
+        if missing:
+            raise WorkerError(
+                error_code=YINGDAO_CONFIG_ERROR,
+                error_message=f"Missing Yingdao config: {', '.join(missing)}",
+                retryable=False,
+            )
 
     def get_access_token(self) -> str:
         """Return an access token from Yingdao."""
         if self._access_token:
             return self._access_token
+
+        self._require_config(
+            {
+                "YINGDAO_ACCESS_KEY_ID": self.access_key_id,
+                "YINGDAO_ACCESS_KEY_SECRET": self.access_key_secret,
+            }
+        )
 
         response = self.http_client.post_json(
             f"{self.api_base_url}/openapi/token",
@@ -96,6 +144,14 @@ class YingdaoService:
         params: list[dict],
     ) -> dict:
         """Start a Yingdao RPA job."""
+        self._require_config(
+            {
+                "YINGDAO_ACCESS_KEY_ID": self.access_key_id,
+                "YINGDAO_ACCESS_KEY_SECRET": self.access_key_secret,
+                "YINGDAO_ACCOUNT_NAME": account_name,
+                "YINGDAO_ROBOT_UUID": robot_uuid,
+            }
+        )
         token = self.get_access_token()
         return self.http_client.post_json(
             f"{self.api_base_url}/openapi/jobs",
@@ -130,9 +186,17 @@ class YingdaoService:
                 return result
             if status in {"failed", "error", "timeout", "canceled", "cancelled"}:
                 message = result.get("error_message") or result.get("message") or status
-                raise RuntimeError(f"Yingdao job {job_uuid} ended with {status}: {message}")
+                raise WorkerError(
+                    error_code=YINGDAO_JOB_FAILED,
+                    error_message=f"Yingdao job {job_uuid} ended with {status}: {message}",
+                    retryable=True,
+                )
             time.sleep(self.poll_interval_seconds)
-        raise TimeoutError(f"Yingdao job {job_uuid} timed out after {timeout} seconds.")
+        raise WorkerError(
+            error_code=YINGDAO_JOB_TIMEOUT,
+            error_message=f"Yingdao job {job_uuid} timed out after {timeout} seconds.",
+            retryable=True,
+        )
 
     def extract_outputs(self, job_result: dict) -> dict:
         """Extract output fields from a Yingdao job result."""
@@ -145,11 +209,27 @@ class YingdaoService:
             outputs = mapped_outputs
         if not isinstance(outputs, dict):
             return {}
+        if not outputs:
+            return {}
+
+        evidence_json_path = (
+            outputs.get("evidence_json_path")
+            or outputs.get("search_evidence_json")
+            or outputs.get("search_evidence_json_path")
+            or outputs.get("search_evidence_path")
+            or outputs.get("evidencePath")
+        )
+        evidence_output_dir = outputs.get("evidence_output_dir") or outputs.get("evidenceOutputDir")
+        output_dir = outputs.get("output_dir") or outputs.get("outputDir")
+        screenshot_path = outputs.get("screenshot_path") or outputs.get("screenshotPath")
+        status = outputs.get("status") or job_result.get("status")
 
         return {
             "evidence_json_path": outputs.get("evidence_json_path")
-            or outputs.get("search_evidence_json_path")
-            or outputs.get("evidencePath"),
-            "output_dir": outputs.get("output_dir") or outputs.get("outputDir"),
+            or evidence_json_path,
+            "evidence_output_dir": evidence_output_dir,
+            "output_dir": output_dir,
+            "screenshot_path": screenshot_path,
+            "status": status,
             **outputs,
         }

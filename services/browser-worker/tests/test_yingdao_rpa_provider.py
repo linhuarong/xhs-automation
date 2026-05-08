@@ -2,13 +2,21 @@ import json
 
 from app.providers.yingdao_rpa import EVIDENCE_NOT_FOUND, YingdaoRpaProvider
 from app.schemas import STATUS_FAILED, STATUS_SUCCESS, STATUS_WAITING_HUMAN_VERIFICATION, SearchJob
+from app.utils.errors import EVIDENCE_JSON_INVALID
 
 
 class FakeYingdaoService:
-    def __init__(self, evidence_json_path: str | None = None) -> None:
+    def __init__(
+        self,
+        evidence_json_path: str | None = None,
+        evidence_output_dir: str | None = None,
+        output_dir: str | None = None,
+    ) -> None:
         self.account_name = "account"
         self.robot_uuid = "robot"
         self.evidence_json_path = evidence_json_path
+        self.evidence_output_dir = evidence_output_dir
+        self.output_dir = output_dir
         self.started_params: list[dict] | None = None
 
     def start_job(self, account_name: str, robot_uuid: str, params: list[dict]) -> dict:
@@ -16,10 +24,17 @@ class FakeYingdaoService:
         return {"job_uuid": "yingdao-job-1"}
 
     def wait_job_done(self, job_uuid: str) -> dict:
-        return {"status": "success", "outputs": {"evidence_json_path": self.evidence_json_path}}
+        return {
+            "status": "success",
+            "outputs": {
+                "evidence_json_path": self.evidence_json_path,
+                "evidence_output_dir": self.evidence_output_dir,
+                "output_dir": self.output_dir,
+            },
+        }
 
     def extract_outputs(self, job_result: dict) -> dict:
-        return job_result["outputs"]
+        return {key: value for key, value in job_result["outputs"].items() if value is not None}
 
 
 def _search_job() -> SearchJob:
@@ -110,3 +125,47 @@ def test_yingdao_rpa_provider_waiting_human_status(tmp_path) -> None:
     assert result.status == STATUS_WAITING_HUMAN_VERIFICATION
     assert result.error_code == "WAITING_HUMAN_VERIFICATION"
     assert result.error_message == "manual required"
+
+
+def test_yingdao_rpa_provider_uses_evidence_output_dir_fallback(tmp_path) -> None:
+    output_dir = tmp_path / "fallback-output"
+    output_dir.mkdir()
+    evidence_path = output_dir / "search_evidence.json"
+    _write_evidence(evidence_path)
+    provider = YingdaoRpaProvider(
+        service=FakeYingdaoService(evidence_output_dir=str(output_dir)),
+        evidence_root=tmp_path,
+    )
+
+    result = provider.search(_search_job())
+
+    assert result.status == STATUS_SUCCESS
+    assert result.evidence_json_path == str(evidence_path)
+
+
+def test_yingdao_rpa_provider_uses_default_local_evidence_fallback(tmp_path) -> None:
+    output_dir = tmp_path / "yingdao-test-1"
+    output_dir.mkdir()
+    evidence_path = output_dir / "search_evidence.json"
+    _write_evidence(evidence_path)
+    provider = YingdaoRpaProvider(service=FakeYingdaoService(), evidence_root=tmp_path)
+
+    result = provider.search(_search_job())
+
+    assert result.status == STATUS_SUCCESS
+    assert result.evidence_json_path == str(evidence_path)
+
+
+def test_yingdao_rpa_provider_invalid_json_returns_failed(tmp_path) -> None:
+    evidence_path = tmp_path / "search_evidence.json"
+    evidence_path.write_text("{not-json", encoding="utf-8")
+    provider = YingdaoRpaProvider(
+        service=FakeYingdaoService(evidence_json_path=str(evidence_path)),
+        evidence_root=tmp_path,
+    )
+
+    result = provider.search(_search_job())
+
+    assert result.status == STATUS_FAILED
+    assert result.error_code == EVIDENCE_JSON_INVALID
+    assert result.evidence_json_path == str(evidence_path)

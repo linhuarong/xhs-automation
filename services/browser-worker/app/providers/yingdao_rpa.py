@@ -5,16 +5,18 @@ from typing import Any
 from app.providers.base import BrowserProvider, BrowserSession
 from app.schemas import (
     STATUS_FAILED,
-    STATUS_SUCCESS,
-    STATUS_WAITING_HUMAN_VERIFICATION,
     SearchJob,
     WorkerResult,
 )
 from app.services.yingdao_service import YingdaoService
+from app.utils.errors import (
+    EVIDENCE_JSON_INVALID,
+    EVIDENCE_NOT_FOUND,
+    YINGDAO_JOB_FAILED,
+    WorkerError,
+)
 
 
-EVIDENCE_NOT_FOUND = "EVIDENCE_NOT_FOUND"
-YINGDAO_JOB_FAILED = "YINGDAO_JOB_FAILED"
 BROWSER_WORKER_ROOT = Path(__file__).resolve().parents[2]
 LOCAL_EVIDENCE_ROOT = BROWSER_WORKER_ROOT / ".local_evidence"
 
@@ -60,6 +62,15 @@ class YingdaoRpaProvider(BrowserProvider):
             )
             job_result = self.service.wait_job_done(str(job_uuid))
             outputs = self.service.extract_outputs(job_result)
+        except WorkerError as exc:
+            return WorkerResult(
+                job_id=job.job_id,
+                status=STATUS_FAILED,
+                error_code=exc.error_code,
+                error_message=exc.error_message,
+                items=[],
+                normalized_records=[],
+            )
         except Exception as exc:
             return WorkerResult(
                 job_id=job.job_id,
@@ -78,6 +89,10 @@ class YingdaoRpaProvider(BrowserProvider):
         evidence_json_path = outputs.get("evidence_json_path")
         if evidence_json_path:
             return Path(str(evidence_json_path))
+
+        evidence_output_dir = outputs.get("evidence_output_dir")
+        if evidence_output_dir:
+            return Path(str(evidence_output_dir)) / "search_evidence.json"
 
         output_dir_value = outputs.get("output_dir")
         if output_dir_value:
@@ -98,7 +113,19 @@ class YingdaoRpaProvider(BrowserProvider):
                 normalized_records=[],
             )
 
-        evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
+        try:
+            evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            return WorkerResult(
+                job_id=job_id,
+                status=STATUS_FAILED,
+                error_code=EVIDENCE_JSON_INVALID,
+                error_message=f"evidence JSON invalid: {evidence_path}: {exc}",
+                evidence_json_path=str(evidence_path),
+                items=[],
+                normalized_records=[],
+            )
+
         status = evidence.get("status") or STATUS_FAILED
         return WorkerResult(
             job_id=evidence.get("job_id") or job_id,
