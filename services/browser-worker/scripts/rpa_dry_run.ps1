@@ -37,7 +37,7 @@ job = SearchJob(
 )
 report = RpaDryRunService().check_search_job(job)
 print(json.dumps(report, ensure_ascii=False, indent=2))
-sys.exit(0 if report.get("status") == "success" else 1)
+sys.exit(0 if report.get('status') == 'success' else 1)
 '@
 
 & $PythonPath -c $PythonCode $JobId $AccountId $Keyword $ProviderType
