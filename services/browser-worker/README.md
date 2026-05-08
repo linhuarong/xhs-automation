@@ -93,9 +93,37 @@ Future `provider_type` values:
 
 - `selenium_chrome`: local debug-only.
 - `yingdao_rpa`: call Yingdao directly.
-- `kuaijingvs_yingdao_rpa`: KuaJingVS environment + Yingdao RPA, the intended main path.
+- `kuaijingvs_yingdao_rpa`: KuaJingVS environment + Yingdao RPA, the intended main path. In Task 24A this is an alias to the Yingdao RPA provider and assumes the KuaJingVS browser environment has already been opened manually or by an external process.
 
 `YingdaoService` should own token/config loading, starting an RPA job, querying job status, waiting for completion, and returning output paths. The Yingdao app must output `search_evidence.json` for search jobs. PostgreSQL should read evidence JSON / `normalized_records`, not depend on Selenium `items`.
+
+Task 24A adds the provider router and Yingdao RPA evidence reader:
+
+- `get_provider("selenium_chrome")` returns the local debug provider.
+- `get_provider("yingdao_rpa")` returns `YingdaoRpaProvider`.
+- `get_provider("kuaijingvs_yingdao_rpa")` currently returns `YingdaoRpaProvider` as a smoke-test-friendly alias.
+- Unknown provider types raise a clear provider error.
+- Unit tests mock Yingdao calls and do not access real Yingdao, XHS, or Chrome.
+
+Yingdao configuration is read from environment variables:
+
+```powershell
+$env:YINGDAO_API_BASE_URL = "https://api.winrobot360.com"
+$env:YINGDAO_ACCESS_KEY_ID = ""
+$env:YINGDAO_ACCESS_KEY_SECRET = ""
+$env:YINGDAO_ACCOUNT_NAME = ""
+$env:YINGDAO_ROBOT_UUID = ""
+$env:YINGDAO_JOB_POLL_INTERVAL_SECONDS = "2"
+$env:YINGDAO_JOB_TIMEOUT_SECONDS = "300"
+```
+
+Manual smoke evidence can be placed under:
+
+```text
+.local_evidence/yingdao-smoke-1/search_evidence.json
+```
+
+The RPA evidence reader maps `screenshot_path` to `screenshot_url`, preserves UTF-8 Chinese fields, and returns `items` plus `normalized_records`.
 
 ## Legacy XHS Search Debug Prototype
 

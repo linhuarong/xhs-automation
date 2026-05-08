@@ -35,3 +35,36 @@ class BrowserProvider(ABC):
     @abstractmethod
     def close_profile(self, session: BrowserSession) -> None:
         """Close the browser profile session."""
+
+
+class UnsupportedProviderError(ValueError):
+    """Raised when a provider type is not registered."""
+
+
+class ReservedProvider(BrowserProvider):
+    """Provider placeholder for a known but unimplemented route."""
+
+    def __init__(self, provider_type: str, message: str) -> None:
+        """Create a reserved provider route."""
+        self.provider_type = provider_type
+        self.message = message
+
+    def open_profile(self, account_id: str) -> BrowserSession:
+        """Reserved providers do not open profiles."""
+        raise NotImplementedError(self.message)
+
+    def get_driver(self, session: BrowserSession) -> Any:
+        """Reserved providers do not expose drivers."""
+        raise NotImplementedError(self.message)
+
+    def check_login(self, driver: Any) -> bool:
+        """Reserved providers cannot check login."""
+        raise NotImplementedError(self.message)
+
+    def capture_screenshot(self, session: BrowserSession, name: str) -> str:
+        """Reserved providers cannot capture screenshots."""
+        raise NotImplementedError(self.message)
+
+    def close_profile(self, session: BrowserSession) -> None:
+        """Reserved providers have no session to close."""
+        return None

@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 
 from app.core.xhs_search_core import search_xhs_keyword
-from app.providers import SeleniumChromeProvider
+from app.providers import get_provider
 from app.schemas import (
     STATUS_ACCEPTED,
     STATUS_FAILED,
@@ -30,8 +30,12 @@ def create_search_job(request: SearchJob) -> WorkerResult:
         message="search job started",
     )
 
-    provider = SeleniumChromeProvider()
-    result = search_xhs_keyword(request, provider)
+    provider = get_provider(request.provider_type)
+    search = getattr(provider, "search", None)
+    if callable(search):
+        result = search(request)
+    else:
+        result = search_xhs_keyword(request, provider)
     current_step = {
         STATUS_SUCCESS: "search_success",
         STATUS_FAILED: "search_failed",
