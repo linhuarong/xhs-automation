@@ -169,8 +169,9 @@ Flow:
 -> Provider Router
 -> KuaJingVSLocalFileTriggerProvider
 -> KuaJingVS resolve/open/wait ready
--> write .local_rpa_jobs/pending/{job_id}.json
--> Yingdao file trigger picks up the JSON
+-> write .local_rpa_jobs/pending/_active_job.json
+-> write .local_rpa_jobs/pending/_trigger_{job_id}.trigger
+-> Yingdao file trigger sees the trigger marker
 -> Yingdao writes .local_evidence/{job_id}/search_evidence.json
 -> browser-worker reads evidence and returns WorkerResult
 ```
@@ -184,6 +185,21 @@ The local queue directories are:
   done/
   failed/
 ```
+
+Yingdao file trigger should watch:
+
+```text
+.local_rpa_jobs/pending
+```
+
+Trigger settings:
+
+- File type: `*.trigger`
+- Event: create
+- First step in Yingdao reads the fixed file:
+  `G:\AI-Automation\xhs-automation\services\browser-worker\.local_rpa_jobs\pending\_active_job.json`
+
+The worker writes `_active_job.json` first, then writes `_trigger_{job_id}.trigger`. The trigger file can contain only the `job_id`; the active job file contains the full payload. The old `pending/{job_id}.json` format is no longer written to avoid accidental trigger mismatch.
 
 Pending search job JSON includes:
 
@@ -209,6 +225,8 @@ Yingdao should write:
 ```
 
 This mode does not bypass QR code, captcha, safety verification, or risk control. If manual handling is required, Yingdao should write evidence with `status = waiting_human_verification`. The first version is single-job oriented; queue processing order is controlled by the Yingdao file trigger setup.
+
+Concurrency note: this fixed active-job file mode is single-machine, single-job serial only. Do not run concurrent local file trigger jobs, because each new job overwrites `_active_job.json`.
 
 ## RPA Dry-Run
 
@@ -398,3 +416,148 @@ python -c "from app.providers import SeleniumChromeProvider; provider = Selenium
 ```
 
 Local Chrome profile data is written under `.local_profiles/{account_id}` by default. Local screenshots are written under `.local_screenshots/{session_id}/{name}.png` by default.
+
+## XHS Keyword Search Module
+
+The browser-worker keyword search path accepts `SearchJob` payloads, routes by `provider_type`, waits for provider evidence, normalizes XHS result items, and returns `WorkerResult` data for later Feishu/PostgreSQL/MinIO integration.
+
+Supported provider types:
+
+- `selenium_chrome`: local debug only.
+- `yingdao_rpa`: Yingdao RPA provider skeleton.
+- `kuaijingvs_yingdao_rpa`: KuaJingVS open-shop plus Yingdao RPA skeleton.
+- `kuaijingvs_local_file_trigger`: KuaJingVS open-shop plus local file trigger handoff.
+- `manual`: reserved, not implemented.
+
+For `kuaijingvs_local_file_trigger`, the execution flow is:
+
+1. Resolve `account_id` to `shop_id`.
+2. Call KuaJingVS `open_shop`.
+3. Create `.local_evidence/{job_id}`.
+4. Write `.local_rpa_jobs/pending/_active_job.json`.
+5. Write `.local_rpa_jobs/pending/_trigger_{job_id}.trigger`.
+6. Wait for `.local_evidence/{job_id}/search_evidence.json`.
+7. Read and return evidence.
+
+The active job file contains the current payload for Yingdao, and the trigger marker is the file-system event used by the local RPA flow. The provider does not require WebDriver or Chrome devtools readiness before writing these files.
+
+Evidence directory layout:
+
+```text
+.local_evidence/{job_id}/
+  search_evidence.json
+  xhs_search_smoke.png
+  xhs_search_before_scroll.png
+```
+
+`search_evidence.json` may include:
+
+- `job_id`, `task_type`, `status`, `keyword`, `account_id`, `provider_type`
+- `captured_at`, `screenshot_path`, `evidence_json_path`
+- `result_area_found`, `item_count`, `normalized_record_count`
+- `items[]`: raw visible XHS search items
+- `normalized_records[]`: standardized records for downstream storage
+- `error_code`, `error_message`
+
+Normalize an evidence file:
+
+```powershell
+.\scripts\xhs_normalize_evidence.ps1 -EvidenceJsonPath ".local_evidence\job-1\search_evidence.json" -WriteBack
+```
+
+Or call the API:
+
+```http
+POST /api/xhs/search/normalize
+{
+  "evidence_json_path": ".local_evidence/job-1/search_evidence.json",
+  "write_back": true
+}
+```
+
+Run a synchronous keyword batch through browser-worker:
+
+```http
+POST /api/xhs/keywords/batch
+{
+  "batch_id": "xhs-batch-001",
+  "account_id": "xhs_dev_01",
+  "provider_type": "kuaijingvs_local_file_trigger",
+  "keywords": ["眼影", "粉底液", "睫毛膏"],
+  "limit": 20,
+  "mode": "sync"
+}
+```
+
+PowerShell helper:
+
+```powershell
+.\scripts\xhs_batch_keywords.ps1 -BatchId "xhs-batch-001" -AccountId "xhs_dev_01" -ProviderType "kuaijingvs_local_file_trigger" -Keywords "眼影,粉底液,睫毛膏" -Limit 20
+```
+
+Current storage, Feishu, and PostgreSQL boundaries are local mocks or in-memory adapters. Real Yingdao, XHS, KuaJingVS, Feishu, PostgreSQL, and MinIO integration is left for final closed-loop acceptance.
+
+## XHS Publish Flow
+
+The publish path is code-complete for local orchestration only. It does not publish to XHS, call real Yingdao, call real KuaJingVS during tests, or upload to Feishu/PostgreSQL/MinIO.
+
+Publish job payload:
+
+```json
+{
+  "job_id": "publish-001",
+  "account_id": "xhs_dev_01",
+  "provider_type": "kuaijingvs_local_file_trigger_publish",
+  "title": "新品眼影试色",
+  "body": "正文内容",
+  "tags": ["眼影", "彩妆"],
+  "assets": [
+    {
+      "local_path": "G:\\images\\001.png",
+      "order": 1,
+      "asset_type": "image"
+    }
+  ]
+}
+```
+
+Publish evidence fields:
+
+- `job_id`, `task_type`, `status`, `account_id`, `provider_type`, `title`
+- `note_url`, `note_id`, `published_at`
+- `evidence_json_path`, `screenshot_path`
+- `before_publish_screenshot_path`, `form_filled_screenshot_path`, `result_screenshot_path`
+- `error_code`, `error_message`, `raw`
+
+For `kuaijingvs_local_file_trigger_publish`, the execution flow is:
+
+1. Resolve `account_id` to `shop_id`.
+2. Call KuaJingVS `open_shop`.
+3. Create `.local_evidence/{job_id}`.
+4. Write `.local_rpa_jobs/pending/_active_publish_job.json`.
+5. Write `.local_rpa_jobs/pending/_trigger_publish_{job_id}.trigger`.
+6. Wait for `.local_evidence/{job_id}/publish_evidence.json`.
+7. Read evidence and map it to `XhsPublishResult`.
+
+The publish trigger provider does not require WebDriver or Chrome devtools readiness before writing the trigger.
+
+Single publish API:
+
+```http
+POST /api/xhs/publish
+```
+
+Batch publish API:
+
+```http
+POST /api/xhs/publish/batch
+```
+
+PowerShell helpers:
+
+```powershell
+.\scripts\xhs_publish_note.ps1 -JobId "publish-001" -AccountId "xhs_dev_01" -ProviderType "kuaijingvs_local_file_trigger_publish" -Title "标题" -Body "正文" -Tags "眼影,彩妆" -AssetPaths "G:\images\001.png"
+.\scripts\xhs_batch_publish.ps1 -BatchId "publish-batch-001" -AccountId "xhs_dev_01" -ProviderType "kuaijingvs_local_file_trigger_publish" -JobsJsonPath ".\publish_jobs.json"
+```
+
+Real publish acceptance remains a later closed-loop task: real XHS UI flow, real Yingdao app execution, real KuaJingVS environment validation, Feishu status writeback, PostgreSQL persistence, and MinIO upload.

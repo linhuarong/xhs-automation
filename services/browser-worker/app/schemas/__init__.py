@@ -7,6 +7,22 @@ from app.schemas.result import (
     WorkerResult,
 )
 from app.schemas.search_job import SearchJob
+from app.schemas.xhs import (
+    XhsBatchKeywordRequest,
+    XhsBatchKeywordResult,
+    XhsKeywordTask,
+    XhsNormalizedRecord,
+    XhsSearchEvidence,
+    XhsSearchItem,
+)
+from app.schemas.xhs_publish import (
+    XhsBatchPublishRequest,
+    XhsBatchPublishResult,
+    XhsPublishAsset,
+    XhsPublishEvidence,
+    XhsPublishJob,
+    XhsPublishResult,
+)
 
 __all__ = [
     "PublishJob",
@@ -16,4 +32,16 @@ __all__ = [
     "STATUS_FAILED",
     "STATUS_WAITING_HUMAN_VERIFICATION",
     "STATUS_ACCEPTED",
+    "XhsSearchItem",
+    "XhsNormalizedRecord",
+    "XhsSearchEvidence",
+    "XhsKeywordTask",
+    "XhsBatchKeywordRequest",
+    "XhsBatchKeywordResult",
+    "XhsPublishAsset",
+    "XhsPublishJob",
+    "XhsPublishEvidence",
+    "XhsPublishResult",
+    "XhsBatchPublishRequest",
+    "XhsBatchPublishResult",
 ]

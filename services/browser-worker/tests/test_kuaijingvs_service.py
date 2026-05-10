@@ -5,8 +5,11 @@ import pytest
 from app.services.kuaijingvs_service import KuaJingVSService
 from app.utils.errors import (
     KJVS_CONFIG_ERROR,
+    KJVS_ENV_READY_CHECK_FAILED,
     KJVS_ENV_FAILED,
     KJVS_ENV_TIMEOUT,
+    KJVS_LIST_SHOPS_FAILED,
+    KJVS_OPEN_FAILED,
     KJVS_PROFILE_NOT_FOUND,
     WorkerError,
 )
@@ -21,10 +24,14 @@ class FakeHttpClient:
 
     def get_json(self, url: str, headers: dict | None = None) -> dict:
         self.gets.append((url, headers))
+        if not self.get_responses:
+            raise RuntimeError("GET failed")
         return self.get_responses.pop(0)
 
     def post_json(self, url: str, payload: dict, headers: dict | None = None) -> dict:
         self.posts.append((url, payload, headers))
+        if not self.post_responses:
+            raise RuntimeError("POST failed")
         return self.post_responses.pop(0)
 
 
@@ -85,22 +92,59 @@ def test_missing_profile_map_path_raises_config_error() -> None:
 def test_list_shops_uses_mock_client() -> None:
     client = FakeHttpClient()
     client.get_responses.append({"shops": [{"shop_id": "1"}]})
-    service = KuaJingVSService(api_id="id", api_secret="secret", http_client=client)
+    service = KuaJingVSService(
+        api_base_url="http://127.0.0.1:48716",
+        api_id=" id ",
+        api_secret=" secret ",
+        http_client=client,
+    )
 
     assert service.list_shops() == [{"shop_id": "1"}]
-    assert client.gets[0][0].endswith("/shops")
-    assert client.gets[0][1] == {"X-Api-Id": "id", "X-Api-Secret": "secret"}
+    assert client.gets[0][0] == "http://127.0.0.1:48716/v1/shops?page=1&size=50"
+    assert client.gets[0][1] == {"x-app-id": "id", "x-app-secret": "secret"}
+
+
+def test_list_shops_does_not_duplicate_v1_when_base_url_includes_v1() -> None:
+    client = FakeHttpClient()
+    client.get_responses.append({"shops": [{"shop_id": "1"}]})
+    service = KuaJingVSService(
+        api_base_url="http://127.0.0.1:48716/v1",
+        api_id="id",
+        api_secret="secret",
+        http_client=client,
+    )
+
+    assert service.list_shops() == [{"shop_id": "1"}]
+    assert client.gets[0][0] == "http://127.0.0.1:48716/v1/shops?page=1&size=50"
 
 
 def test_open_and_close_shop_use_mock_client() -> None:
     client = FakeHttpClient()
     client.post_responses.extend([{"status": "opening"}, {"status": "closed"}])
-    service = KuaJingVSService(http_client=client)
+    service = KuaJingVSService(api_base_url="http://127.0.0.1:48716/v1", http_client=client)
 
     assert service.open_shop("123") == {"status": "opening"}
     assert service.close_shop("123") == {"status": "closed"}
-    assert client.posts[0][0].endswith("/shops/123/open")
-    assert client.posts[1][0].endswith("/shops/123/close")
+    assert client.posts[0][0] == "http://127.0.0.1:48716/v1/shops/123/open"
+    assert client.posts[1][0] == "http://127.0.0.1:48716/v1/shops/123/close"
+
+
+def test_list_shops_failure_raises_list_shops_failed() -> None:
+    service = KuaJingVSService(http_client=FakeHttpClient())
+
+    with pytest.raises(WorkerError) as exc:
+        service.list_shops()
+
+    assert exc.value.error_code == KJVS_LIST_SHOPS_FAILED
+
+
+def test_open_shop_failure_raises_open_failed() -> None:
+    service = KuaJingVSService(http_client=FakeHttpClient())
+
+    with pytest.raises(WorkerError) as exc:
+        service.open_shop("123")
+
+    assert exc.value.error_code == KJVS_OPEN_FAILED
 
 
 def test_wait_environment_ready_success() -> None:
@@ -121,6 +165,15 @@ def test_wait_environment_ready_failed() -> None:
 
     assert exc.value.error_code == KJVS_ENV_FAILED
     assert "open failed" in exc.value.error_message
+
+
+def test_wait_environment_ready_http_failure_raises_ready_check_failed() -> None:
+    service = KuaJingVSService(http_client=FakeHttpClient())
+
+    with pytest.raises(WorkerError) as exc:
+        service.wait_environment_ready("123", timeout_seconds=5)
+
+    assert exc.value.error_code == KJVS_ENV_READY_CHECK_FAILED
 
 
 def test_wait_environment_ready_timeout() -> None:

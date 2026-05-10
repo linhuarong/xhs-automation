@@ -57,21 +57,30 @@ def test_build_search_payload_contains_expected_fields(tmp_path):
     assert payload["expected_screenshot_path"].endswith("xhs_search_smoke.png")
     assert payload["expected_evidence_json_path"].endswith("search_evidence.json")
     assert "powershell -NoProfile -ExecutionPolicy Bypass -File" in payload["dos_command"]
-    assert "-Keyword \"眼影\"" in payload["dos_command"]
+    assert '-Keyword "眼影"' in payload["dos_command"]
     assert payload["created_at"].endswith("Z")
 
 
-def test_enqueue_search_job_writes_utf8_pending_json(tmp_path):
+def test_enqueue_search_job_writes_active_job_and_trigger(tmp_path):
     queue = make_queue(tmp_path)
     output_dir = tmp_path / ".local_evidence" / "local-file-1"
 
-    pending_path = queue.enqueue_search_job(make_job(), output_dir)
-    raw_bytes = pending_path.read_bytes()
+    active_job_path = queue.enqueue_search_job(make_job(), output_dir)
+    trigger_path = queue.queue_root / "pending" / "_trigger_local-file-1.trigger"
+    legacy_job_path = queue.queue_root / "pending" / "local-file-1.json"
+    raw_bytes = active_job_path.read_bytes()
     payload = json.loads(raw_bytes.decode("utf-8"))
 
-    assert pending_path == queue.queue_root / "pending" / "local-file-1.json"
+    assert active_job_path == queue.queue_root / "pending" / "_active_job.json"
+    assert trigger_path.exists()
+    assert trigger_path.read_text(encoding="utf-8") == "local-file-1"
+    assert not legacy_job_path.exists()
     assert raw_bytes[:3] != b"\xef\xbb\xbf"
+    assert payload["job_id"] == "local-file-1"
     assert payload["keyword"] == "眼影"
+    assert payload["account_id"] == "xhs_dev_01"
+    assert payload["dos_command"]
+    assert payload["before_scroll_screenshot_path"].endswith("xhs_search_before_scroll.png")
 
 
 def test_wait_for_evidence_success(tmp_path):

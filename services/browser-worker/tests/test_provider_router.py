@@ -2,6 +2,7 @@ import pytest
 
 from app.providers import (
     KuaJingVSLocalFileTriggerProvider,
+    KuaJingVSLocalFileTriggerPublishProvider,
     KuaJingVSYingdaoRpaProvider,
     ReservedProvider,
     SeleniumChromeProvider,
@@ -33,6 +34,12 @@ def test_get_provider_kuaijingvs_local_file_trigger_returns_file_provider() -> N
     provider = get_provider("kuaijingvs_local_file_trigger")
 
     assert isinstance(provider, KuaJingVSLocalFileTriggerProvider)
+
+
+def test_get_provider_kuaijingvs_local_file_trigger_publish_returns_publish_provider() -> None:
+    provider = get_provider("kuaijingvs_local_file_trigger_publish")
+
+    assert isinstance(provider, KuaJingVSLocalFileTriggerPublishProvider)
 
 
 def test_get_provider_manual_returns_reserved_provider() -> None:

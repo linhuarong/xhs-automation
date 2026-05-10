@@ -88,11 +88,18 @@ class FakeQueueService:
         return self.evidence
 
 
-def make_provider(tmp_path, kuaijingvs_service=None, queue_service=None, close_after_job=False):
+def make_provider(
+    tmp_path,
+    kuaijingvs_service=None,
+    queue_service=None,
+    close_after_job=False,
+    wait_environment_ready=False,
+):
     return KuaJingVSLocalFileTriggerProvider(
         kuaijingvs_service=kuaijingvs_service or FakeKuaJingVSService(),
         queue_service=queue_service or FakeQueueService(tmp_path),
         close_after_job=close_after_job,
+        wait_environment_ready=wait_environment_ready,
         evidence_timeout_seconds=1,
     )
 
@@ -113,12 +120,29 @@ def test_local_file_trigger_provider_success_flow(tmp_path):
     assert kjvs.calls == [
         ("resolve_shop_id", "xhs_dev_01"),
         ("open_shop", "shop-123"),
-        ("wait_environment_ready", "shop-123"),
     ]
     assert [call[0] for call in queue.calls] == [
         "enqueue_search_job",
         "wait_for_evidence",
         "read_evidence",
+    ]
+    assert "wait_environment_ready" not in [call[0] for call in kjvs.calls]
+
+
+def test_local_file_trigger_provider_open_success_enqueues_before_optional_ready_check(tmp_path):
+    kjvs = FakeKuaJingVSService(fail_step="wait")
+    queue = FakeQueueService(tmp_path)
+    provider = make_provider(tmp_path, kjvs, queue, wait_environment_ready=True)
+
+    result = provider.search(make_job())
+
+    assert result.status == STATUS_FAILED
+    assert result.error_code == KJVS_ENV_TIMEOUT
+    assert queue.calls[0][0] == "enqueue_search_job"
+    assert kjvs.calls == [
+        ("resolve_shop_id", "xhs_dev_01"),
+        ("open_shop", "shop-123"),
+        ("wait_environment_ready", "shop-123"),
     ]
 
 
@@ -152,10 +176,11 @@ def test_local_file_trigger_provider_open_result_failed(tmp_path):
     assert result.error_code == KJVS_OPEN_FAILED
 
 
-def test_local_file_trigger_provider_env_timeout(tmp_path):
+def test_local_file_trigger_provider_optional_env_timeout(tmp_path):
     result = make_provider(
         tmp_path,
         kuaijingvs_service=FakeKuaJingVSService(fail_step="wait"),
+        wait_environment_ready=True,
     ).search(make_job())
 
     assert result.status == STATUS_FAILED
