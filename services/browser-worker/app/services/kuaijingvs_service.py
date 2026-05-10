@@ -7,8 +7,11 @@ from typing import Any
 from app.services.yingdao_service import UrllibJsonClient
 from app.utils.errors import (
     KJVS_CONFIG_ERROR,
+    KJVS_ENV_READY_CHECK_FAILED,
     KJVS_ENV_FAILED,
     KJVS_ENV_TIMEOUT,
+    KJVS_LIST_SHOPS_FAILED,
+    KJVS_OPEN_FAILED,
     KJVS_PROFILE_NOT_FOUND,
     WorkerError,
 )
@@ -28,12 +31,16 @@ class KuaJingVSService:
         http_client: Any | None = None,
     ) -> None:
         """Create a KuaJingVS service from environment-backed config."""
-        self.api_base_url = (
+        self.api_base_url = self._normalize_api_base_url(
             api_base_url or os.getenv("KJVS_API_BASE_URL") or "http://127.0.0.1:49709"
-        ).rstrip("/")
-        self.api_id = api_id or os.getenv("KJVS_API_ID", "")
-        self.api_secret = api_secret or os.getenv("KJVS_API_SECRET", "")
-        self.profile_map_path = profile_map_path or os.getenv("KJVS_PROFILE_MAP_PATH", "")
+        )
+        self.api_id = self._strip_config(api_id if api_id is not None else os.getenv("KJVS_API_ID", ""))
+        self.api_secret = self._strip_config(
+            api_secret if api_secret is not None else os.getenv("KJVS_API_SECRET", "")
+        )
+        self.profile_map_path = self._strip_config(
+            profile_map_path if profile_map_path is not None else os.getenv("KJVS_PROFILE_MAP_PATH", "")
+        )
         self.ready_timeout_seconds = self._parse_int_config(
             "KJVS_ENV_READY_TIMEOUT_SECONDS",
             ready_timeout_seconds,
@@ -45,6 +52,21 @@ class KuaJingVSService:
             default=2,
         )
         self.http_client = http_client or UrllibJsonClient()
+
+    def _strip_config(self, value: Any) -> str:
+        """Strip environment-backed string config."""
+        return str(value or "").strip()
+
+    def _normalize_api_base_url(self, api_base_url: str) -> str:
+        """Normalize KuaJingVS base URL to the host root without /v1."""
+        base_url = self._strip_config(api_base_url).rstrip("/")
+        if base_url.endswith("/v1"):
+            return base_url[:-3].rstrip("/")
+        return base_url
+
+    def _api_url(self, path: str) -> str:
+        """Build a KuaJingVS v1 API URL."""
+        return f"{self.api_base_url}/v1/{path.lstrip('/')}"
 
     def _parse_int_config(self, env_name: str, value: int | None, default: int) -> int:
         """Parse integer KuaJingVS config."""
@@ -68,8 +90,8 @@ class KuaJingVSService:
     def _headers(self) -> dict[str, str]:
         """Build KuaJingVS request headers."""
         return {
-            "X-Api-Id": self.api_id,
-            "X-Api-Secret": self.api_secret,
+            "x-app-id": self.api_id,
+            "x-app-secret": self.api_secret,
         }
 
     def _load_profile_map(self) -> dict:
@@ -105,10 +127,19 @@ class KuaJingVSService:
 
     def list_shops(self) -> list[dict]:
         """List shops through the KuaJingVS HTTP contract."""
-        response = self.http_client.get_json(
-            f"{self.api_base_url}/shops",
-            headers=self._headers(),
-        )
+        try:
+            response = self.http_client.get_json(
+                self._api_url("/shops?page=1&size=50"),
+                headers=self._headers(),
+            )
+        except WorkerError:
+            raise
+        except Exception as exc:
+            raise WorkerError(
+                error_code=KJVS_LIST_SHOPS_FAILED,
+                error_message=f"KuaJingVS list shops failed: {exc}",
+                retryable=True,
+            ) from exc
         shops = response.get("shops") or response.get("data") or []
         return shops if isinstance(shops, list) else []
 
@@ -126,16 +157,25 @@ class KuaJingVSService:
 
     def open_shop(self, shop_id: str) -> dict:
         """Open a KuaJingVS shop environment through HTTP contract."""
-        return self.http_client.post_json(
-            f"{self.api_base_url}/shops/{shop_id}/open",
-            {},
-            headers=self._headers(),
-        )
+        try:
+            return self.http_client.post_json(
+                self._api_url(f"/shops/{shop_id}/open"),
+                {},
+                headers=self._headers(),
+            )
+        except WorkerError:
+            raise
+        except Exception as exc:
+            raise WorkerError(
+                error_code=KJVS_OPEN_FAILED,
+                error_message=f"KuaJingVS open shop failed for {shop_id}: {exc}",
+                retryable=True,
+            ) from exc
 
     def close_shop(self, shop_id: str) -> dict:
         """Close a KuaJingVS shop environment through HTTP contract."""
         return self.http_client.post_json(
-            f"{self.api_base_url}/shops/{shop_id}/close",
+            self._api_url(f"/shops/{shop_id}/close"),
             {},
             headers=self._headers(),
         )
@@ -149,10 +189,19 @@ class KuaJingVSService:
         timeout = timeout_seconds if timeout_seconds is not None else self.ready_timeout_seconds
         deadline = time.monotonic() + timeout
         while time.monotonic() <= deadline:
-            response = self.http_client.get_json(
-                f"{self.api_base_url}/shops/{shop_id}/status",
-                headers=self._headers(),
-            )
+            try:
+                response = self.http_client.get_json(
+                    self._api_url(f"/shops/{shop_id}/status"),
+                    headers=self._headers(),
+                )
+            except WorkerError:
+                raise
+            except Exception as exc:
+                raise WorkerError(
+                    error_code=KJVS_ENV_READY_CHECK_FAILED,
+                    error_message=f"KuaJingVS environment ready check failed for {shop_id}: {exc}",
+                    retryable=True,
+                ) from exc
             status = str(response.get("status", "")).lower()
             if status in {"ready", "running", "opened", "success"}:
                 return response

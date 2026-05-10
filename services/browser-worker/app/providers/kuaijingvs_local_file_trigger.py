@@ -23,12 +23,14 @@ class KuaJingVSLocalFileTriggerProvider(BrowserProvider):
         kuaijingvs_service: KuaJingVSService | None = None,
         queue_service: LocalRpaQueueService | None = None,
         close_after_job: bool = False,
+        wait_environment_ready: bool = False,
         evidence_timeout_seconds: int | None = None,
     ) -> None:
         """Create a KuaJingVS local file trigger provider."""
         self.kuaijingvs_service = kuaijingvs_service or KuaJingVSService()
         self.queue_service = queue_service or LocalRpaQueueService()
         self.close_after_job = close_after_job
+        self.wait_environment_ready = wait_environment_ready
         self.evidence_timeout_seconds = evidence_timeout_seconds or int(
             os.getenv("RPA_LOCAL_EVIDENCE_TIMEOUT_SECONDS", "300")
         )
@@ -40,11 +42,12 @@ class KuaJingVSLocalFileTriggerProvider(BrowserProvider):
             shop_id = self.kuaijingvs_service.resolve_shop_id(job.account_id)
             open_result = self.kuaijingvs_service.open_shop(shop_id)
             self._ensure_open_success(job.job_id, open_result)
-            self.kuaijingvs_service.wait_environment_ready(shop_id)
 
             output_dir = self.queue_service.evidence_root / job.job_id
             output_dir.mkdir(parents=True, exist_ok=True)
             self.queue_service.enqueue_search_job(job, output_dir)
+            if self.wait_environment_ready:
+                self.kuaijingvs_service.wait_environment_ready(shop_id)
             evidence_path = output_dir / "search_evidence.json"
             self.queue_service.wait_for_evidence(
                 evidence_path,
