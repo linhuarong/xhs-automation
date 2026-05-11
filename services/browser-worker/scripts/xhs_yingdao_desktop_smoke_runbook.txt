@@ -1,0 +1,66 @@
+Yingdao Desktop Manual Smoke Test Runbook
+
+Purpose:
+Verify that the Yingdao desktop client can read browser-worker local active job JSON and write local receipt/evidence JSON.
+
+Hard boundaries:
+- Do not open browser.
+- Do not open Xiaohongshu.
+- Do not search Xiaohongshu.
+- Do not publish Xiaohongshu.
+- Do not click final publish.
+- Do not call Yingdao cloud OpenAPI.
+- Do not call KuaJingVS.
+- Do not write Feishu, PostgreSQL, or MinIO.
+
+Steps:
+1. In PowerShell, run the prepare script and copy the active_job_path, expected_receipt_path, and expected_evidence_path.
+2. Open the Yingdao desktop client.
+3. Create a new local flow.
+4. Add a read-file step. Read the browser-worker active job JSON:
+   - search: _active_job.json
+   - publish: _active_publish_job.json
+5. Add a JSON parse step. Extract:
+   - job_id
+   - job_type
+   - account_id
+   - provider_type
+   - evidence_output_dir
+   - keyword for search
+   - title for publish
+6. Add a write-file step. Write yingdao_smoke_receipt.json to the expected receipt path.
+   Required receipt fields:
+   - schema_version = 1.0
+   - smoke_type = yingdao_desktop_manual_file_read
+   - job_type = xhs_search or xhs_publish
+   - job_id
+   - account_id
+   - provider_type = yingdao_local_file_trigger
+   - status = rpa_file_read_success
+   - read_at
+   - source_active_job_path
+   - evidence_output_dir
+   - rpa_runtime.opened_browser = false
+   - rpa_runtime.opened_xhs = false
+   - rpa_runtime.called_external_api = false
+7. Add a write-file step. For search, write search_evidence.json to the expected evidence path.
+   Required smoke_test flags:
+   - desktop_rpa_read_active_job = true
+   - opened_browser = false
+   - opened_xhs = false
+   - real_search_executed = false
+8. Add a write-file step. For publish, write publish_evidence.json to the expected evidence path.
+   Required smoke_test flags:
+   - desktop_rpa_read_active_job = true
+   - opened_browser = false
+   - opened_xhs = false
+   - real_publish_executed = false
+   - clicked_final_publish = false
+9. Do not add any browser automation step.
+10. Do not add any webpage automation step.
+11. Do not add any Xiaohongshu page step.
+12. Do not add any click publish step.
+13. Run the local Yingdao flow.
+14. Return to PowerShell and run xhs_yingdao_desktop_smoke_verify.ps1.
+
+If you only need to validate browser-worker without desktop Yingdao, use xhs_yingdao_desktop_smoke_mock_write.ps1.

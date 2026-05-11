@@ -1,0 +1,23 @@
+Yingdao Local Static HTML Sandbox Runbook
+
+Purpose:
+Only validate local fake form field mapping. Do not use real Xiaohongshu, real publish, or Yingdao cloud APIs.
+
+Steps:
+1. Run xhs_yingdao_html_sandbox_prepare.ps1 from browser-worker to create a sandbox package.
+2. Open the generated local search_sandbox.html or publish_sandbox.html file only.
+3. In Yingdao desktop, create a local manual flow.
+4. Add a step to open the local HTML file path from sandbox_manifest.json.
+5. Add form-fill steps for the fake local form fields only.
+6. Add a step to write sandbox_trace.json in the same sandbox directory.
+7. Add a step to write sandbox_result.json in the same sandbox directory.
+8. Return to PowerShell and run xhs_yingdao_html_sandbox_verify.ps1.
+
+Safety rules:
+- 不打开小红书.
+- 不打开外部网页.
+- 不点击真实发布.
+- Do not call Yingdao cloud API.
+- Do not call KuaJingVS open shop or close shop.
+- Do not submit real search or publish requests.
+- Do not write secrets, cookies, tokens, or binary images into trace/result files.

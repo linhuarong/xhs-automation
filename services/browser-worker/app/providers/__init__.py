@@ -8,6 +8,7 @@ from app.providers.kuaijingvs_local_file_trigger import KuaJingVSLocalFileTrigge
 from app.providers.kuaijingvs_local_file_trigger_publish import KuaJingVSLocalFileTriggerPublishProvider
 from app.providers.kuaijingvs_yingdao_rpa import KuaJingVSYingdaoRpaProvider
 from app.providers.selenium_chrome import SeleniumChromeProvider
+from app.providers.yingdao_local_file_trigger import YingdaoLocalFileTriggerProvider
 from app.providers.yingdao_rpa import YingdaoRpaProvider
 
 
@@ -18,6 +19,8 @@ def get_provider(provider_type: str) -> BrowserProvider:
         return SeleniumChromeProvider()
     if normalized_provider_type == "yingdao_rpa":
         return YingdaoRpaProvider()
+    if normalized_provider_type == "yingdao_local_file_trigger":
+        return YingdaoLocalFileTriggerProvider()
     if normalized_provider_type == "kuaijingvs_yingdao_rpa":
         return KuaJingVSYingdaoRpaProvider()
     if normalized_provider_type == "kuaijingvs_local_file_trigger":
@@ -41,6 +44,7 @@ __all__ = [
     "UnsupportedProviderError",
     "KuaJingVSYingdaoRpaProvider",
     "SeleniumChromeProvider",
+    "YingdaoLocalFileTriggerProvider",
     "YingdaoRpaProvider",
     "get_provider",
 ]

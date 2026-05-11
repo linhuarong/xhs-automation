@@ -1,0 +1,30 @@
+XHS Account Binding Strict Mode Runbook
+
+Purpose:
+Strict mode checks account_id -> profile map -> hardened KuaJingVS readonly discovery -> local account binding consistency.
+
+Recommended order:
+1. Run KuaJingVS readonly discovery only if explicitly allowed for your local environment.
+2. Run xhs_kjvs_discovery_harden.ps1 to create hardened_discovery.json.
+3. Run xhs_account_binding_strict_check.ps1 for search or publish.
+4. Inspect strict_binding_result.json and strict_binding_summary.json.
+
+Hard boundaries:
+- 不要 open shop.
+- 不要 close shop.
+- 不要打开小红书.
+- 不要打开外部网页.
+- 不要点击真实发布.
+- 不要调用影刀云 API.
+- Do not call KuaJingVS open shop or close shop.
+- Do not call Yingdao OpenAPI.
+- Do not search or publish anything.
+
+Strict failures are expected when:
+- profile map is missing or invalid.
+- account_id is missing from profile map.
+- hardened_discovery.json is missing or unsafe.
+- shop_id does not match hardened discovery.
+- shop_name does not match hardened discovery.
+- provider_type is not allowed.
+- sensitive fields or sensitive values remain in hardened evidence.

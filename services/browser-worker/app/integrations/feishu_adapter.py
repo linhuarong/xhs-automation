@@ -30,6 +30,10 @@ class FeishuAdapter(ABC):
     def attach_publish_evidence(self, job_id: str, files: list[dict]) -> dict:
         """Attach publish evidence metadata to a Feishu record."""
 
+    @abstractmethod
+    def upsert_workflow_summary(self, summary: dict) -> dict:
+        """Upsert one workflow summary."""
+
 
 class NotConfiguredFeishuAdapter(FeishuAdapter):
     """Placeholder adapter that never calls real Feishu."""
@@ -52,6 +56,9 @@ class NotConfiguredFeishuAdapter(FeishuAdapter):
     def attach_publish_evidence(self, job_id: str, files: list[dict]) -> dict:
         raise self._error()
 
+    def upsert_workflow_summary(self, summary: dict) -> dict:
+        raise self._error()
+
     def _error(self) -> WorkerError:
         return WorkerError(
             error_code=FEISHU_ADAPTER_NOT_CONFIGURED,
@@ -71,6 +78,7 @@ class MockFeishuAdapter(FeishuAdapter):
         self.publish_results: list[dict] = []
         self.publish_batch_summaries: list[dict] = []
         self.publish_evidence_attachments: list[dict] = []
+        self.workflow_summaries: list[dict] = []
 
     def upsert_keyword_result(self, record: dict) -> dict:
         self.keyword_results.append(record)
@@ -97,3 +105,7 @@ class MockFeishuAdapter(FeishuAdapter):
         attachment = {"job_id": job_id, "files": files}
         self.publish_evidence_attachments.append(attachment)
         return {"status": "success", **attachment}
+
+    def upsert_workflow_summary(self, summary: dict) -> dict:
+        self.workflow_summaries.append(summary)
+        return {"status": "success", "summary": summary}

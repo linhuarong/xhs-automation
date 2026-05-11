@@ -7,6 +7,7 @@ def test_mock_feishu_adapter_receives_records() -> None:
     result = adapter.upsert_keyword_result({"job_id": "job-1", "keyword": "眼影"})
     summary = adapter.upsert_batch_summary({"batch_id": "batch-1", "success_count": 1})
     attachment = adapter.attach_evidence("job-1", [{"name": "search_evidence.json"}])
+    workflow = adapter.upsert_workflow_summary({"workflow_id": "wf-1", "status": "success"})
 
     assert result["status"] == "success"
     assert summary["status"] == "success"
@@ -14,3 +15,5 @@ def test_mock_feishu_adapter_receives_records() -> None:
     assert adapter.keyword_results == [{"job_id": "job-1", "keyword": "眼影"}]
     assert adapter.batch_summaries == [{"batch_id": "batch-1", "success_count": 1}]
     assert adapter.evidence_attachments[0]["files"] == [{"name": "search_evidence.json"}]
+    assert workflow["summary"]["workflow_id"] == "wf-1"
+    assert adapter.workflow_summaries == [{"workflow_id": "wf-1", "status": "success"}]

@@ -42,3 +42,17 @@ def test_minio_adapter_skeleton_raises() -> None:
         MinioStorageAdapter().archive_file(__file__, __file__)
 
     assert exc.value.error_code == MINIO_ADAPTER_NOT_CONFIGURED
+
+
+def test_archive_workflow_manifest(tmp_path) -> None:
+    manifest = XhsStorageService(
+        evidence_root=tmp_path / ".local_evidence",
+        archive_root=tmp_path / ".local_archive",
+    ).archive_workflow_manifest("wf-1", {"status": "success"})
+
+    manifest_path = tmp_path / ".local_archive" / "xhs_workflow" / "wf-1" / "manifest.json"
+    raw = manifest_path.read_bytes()
+
+    assert raw[:3] != b"\xef\xbb\xbf"
+    assert manifest["status"] == "archived"
+    assert manifest_path.exists()

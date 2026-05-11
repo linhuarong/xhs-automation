@@ -147,6 +147,34 @@ class XhsStorageService:
                 retryable=True,
             ) from exc
 
+    def archive_workflow_manifest(self, workflow_id: str, manifest: dict) -> dict:
+        """Archive a mock workflow manifest locally."""
+        archive_dir = self.archive_root / "xhs_workflow" / workflow_id
+        archive_path = archive_dir / "manifest.json"
+        payload = {
+            "workflow_id": workflow_id,
+            "archived_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+            **manifest,
+        }
+        try:
+            archive_dir.mkdir(parents=True, exist_ok=True)
+            archive_path.write_text(
+                json.dumps(payload, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+            return {
+                "workflow_id": workflow_id,
+                "manifest_path": str(archive_path),
+                "status": "archived",
+                "payload": payload,
+            }
+        except OSError as exc:
+            raise WorkerError(
+                error_code=XHS_STORAGE_ARCHIVE_FAILED,
+                error_message=f"failed to archive XHS workflow manifest for {workflow_id}: {exc}",
+                retryable=True,
+            ) from exc
+
     def _resolve_worker_path(self, value: str | Path) -> Path:
         """Resolve relative paths from services/browser-worker."""
         path = Path(value)

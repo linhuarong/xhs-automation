@@ -1,0 +1,32 @@
+Yingdao Actual Local HTML Form-fill Smoke Runbook
+
+Purpose:
+Only verify Yingdao desktop can fill the local browser-worker HTML sandbox form.
+
+Hard boundaries:
+- 不打开小红书。
+- 不打开外部网页。
+- 不点击真实发布。
+- Do not call Yingdao cloud API or OpenAPI.
+- Do not open KuaJingVS or any shop environment.
+- Do not search or publish anything.
+
+Manual Yingdao desktop steps:
+1. Run xhs_yingdao_actual_form_fill_prepare.ps1 from PowerShell.
+2. Open actual_form_fill_runbook.json and actual_form_fill_input.json.
+3. Open only the local file:// html_uri from actual_form_fill_input.json.
+4. Locate local fake form fields using yingdao_action_sequence.json or selector_mapping_report.md.
+5. Fill only the local fake input, textarea, select, and checkbox elements.
+6. Click only simulate_search_button for search jobs.
+7. Click only simulate_prepare_publish_button for publish jobs.
+8. Write actual_form_fill_trace.json to expected_trace_path.
+9. Write actual_form_fill_result.json to expected_result_path.
+10. Return to PowerShell and run xhs_yingdao_actual_form_fill_verify.ps1.
+
+Trace safety values must remain:
+- opened_external_url = false
+- opened_xhs = false
+- called_external_api = false
+- clicked_real_publish = false
+- real_search_executed = false
+- real_publish_executed = false

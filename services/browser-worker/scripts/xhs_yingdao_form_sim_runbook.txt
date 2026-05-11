@@ -1,0 +1,41 @@
+Yingdao Browserless Form-fill Simulator Runbook
+
+Purpose:
+Verify that Yingdao desktop can read local JSON form simulator packages and write local form-fill trace/result JSON without any browser or webpage.
+
+Hard boundaries:
+- Do not open browser.
+- Do not open local HTML.
+- Do not open Xiaohongshu.
+- Do not search Xiaohongshu.
+- Do not publish Xiaohongshu.
+- Do not click publish.
+- Do not call Yingdao cloud OpenAPI.
+- Do not call KuaJingVS.
+- Do not write Feishu, PostgreSQL, or MinIO.
+
+Steps:
+1. In PowerShell, run xhs_yingdao_form_sim_prepare.ps1 and copy simulator_dir, form_spec_path, and expected_actions_path.
+2. Open the Yingdao desktop client.
+3. Create a new local flow.
+4. Add a read-file step. Read simulator_input.json.
+5. Add a read-file step. Read form_spec.json.
+6. Add a read-file step. Read expected_actions.json.
+7. Add a JSON parse step. Read actions, field_key, action, value, and step.
+8. Do not execute webpage automation.
+9. Do not open browser.
+10. Do not open local HTML.
+11. Do not open Xiaohongshu.
+12. According to expected_actions, write form_fill_trace.json.
+13. According to form_spec and trace, write simulator_result.json.
+14. Return to PowerShell and run xhs_yingdao_form_sim_verify.ps1.
+
+Trace runtime flags must stay false:
+- opened_browser
+- opened_xhs
+- called_external_api
+- clicked_real_publish
+
+Publish traces must never include action = click_publish.
+
+If you only need to validate browser-worker without desktop Yingdao, use xhs_yingdao_form_sim_mock_write.ps1.

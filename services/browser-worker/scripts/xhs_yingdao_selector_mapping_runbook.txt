@@ -1,0 +1,24 @@
+Yingdao Local HTML Selector Mapping Runbook
+
+Purpose:
+Only confirm selector candidates against the local HTML sandbox. Do not map real Xiaohongshu UI.
+
+Steps:
+1. Run xhs_yingdao_selector_mapping_prepare.ps1 from browser-worker.
+2. Open selector_mapping_report.md with xhs_yingdao_selector_mapping_open_report.ps1.
+3. Open only the generated local HTML sandbox file.
+4. In Yingdao desktop, create a local manual flow.
+5. Use the report table to locate local fake form fields such as #keyword_input or #title_input.
+6. Confirm each recommended selector exists and is unique.
+7. Write selector_mapping_confirmation.json in the selector_mapping job directory.
+8. Return to PowerShell and run xhs_yingdao_selector_mapping_verify.ps1.
+
+Safety rules:
+- 不打开小红书.
+- 不打开外部网页.
+- 不点击真实发布.
+- Do not call Yingdao cloud API.
+- Do not call KuaJingVS open shop or close shop.
+- Do not scrape real Xiaohongshu selectors.
+- Do not submit real search or publish requests.
+- Do not write secrets, cookies, tokens, or binary images into confirmation files.
