@@ -25,7 +25,7 @@ def test_external_readiness_api_structure_and_audit(tmp_path, monkeypatch) -> No
     assert response.status_code == 200
     assert body["status"] == "success"
     assert body["safe_mode"] is True
-    assert body["summary"]["total"] == 19
+    assert body["summary"]["total"] == 20
     assert "dependencies" in body
     assert audit_path.exists()
     assert "external_readiness_check" in audit_path.read_text(encoding="utf-8")

@@ -51,6 +51,7 @@ class ExternalReadinessService:
             self.check_minio(),
             self.check_local_contract_replay(),
             self.check_local_persistence_replay(),
+            self.check_local_e2e_replay(),
             self.check_n8n_contract(),
             self.check_openclaw_contract(),
             self.check_local_storage(),
@@ -770,6 +771,55 @@ class ExternalReadinessService:
         return ExternalDependencyStatus(
             name="local_persistence_replay",
             mode="local_feishu_postgres_minio_mock_persistence",
+            status=status,
+            required=False,
+            message=message,
+            checks=checks,
+        )
+
+    def check_local_e2e_replay(self) -> ExternalDependencyStatus:
+        """Check local full E2E replay orchestrator readiness without running replay."""
+        e2e_root = self._resolve_worker_path(self._get("XHS_LOCAL_E2E_REPLAY_ROOT", ".local_rpa_queue/e2e"))
+        scripts = [
+            self.worker_root / "scripts/xhs_e2e_replay_search.ps1",
+            self.worker_root / "scripts/xhs_e2e_replay_publish.ps1",
+            self.worker_root / "scripts/xhs_e2e_replay_all.ps1",
+            self.worker_root / "scripts/xhs_e2e_replay_runbook.txt",
+        ]
+        e2e_parent = e2e_root if e2e_root.exists() else e2e_root.parent
+        allow_external_calls = self._truthy(self._get("XHS_LOCAL_E2E_REPLAY_ALLOW_EXTERNAL_CALLS", "false"))
+        checks = {
+            "e2e_replay_enabled": self._truthy(self._get("XHS_LOCAL_E2E_REPLAY_ENABLED", "true")),
+            "e2e_output_dir_writable": e2e_parent.exists() and os.access(e2e_parent, os.W_OK),
+            "contract_replay_available": self._truthy(self._get("XHS_LOCAL_CONTRACT_REPLAY_ENABLED", "true")),
+            "persistence_replay_available": self._truthy(self._get("XHS_LOCAL_PERSISTENCE_REPLAY_ENABLED", "true")),
+            "strict_binding_required": self._truthy(self._get("XHS_LOCAL_E2E_REPLAY_REQUIRE_STRICT_BINDING", "true")),
+            "hardened_discovery_required": self._truthy(self._get("XHS_LOCAL_E2E_REPLAY_REQUIRE_HARDENED_DISCOVERY", "true")),
+            "real_external_calls_forbidden": (
+                not allow_external_calls
+                and not self._truthy(self._get("XHS_LOCAL_CONTRACT_REPLAY_ALLOW_EXTERNAL_N8N", "false"))
+                and not self._truthy(self._get("XHS_LOCAL_CONTRACT_REPLAY_ALLOW_EXTERNAL_OPENCLAW", "false"))
+                and not self._truthy(self._get("XHS_LOCAL_PERSISTENCE_ALLOW_REAL_FEISHU", "false"))
+                and not self._truthy(self._get("XHS_LOCAL_PERSISTENCE_ALLOW_REAL_POSTGRES", "false"))
+                and not self._truthy(self._get("XHS_LOCAL_PERSISTENCE_ALLOW_REAL_MINIO", "false"))
+                and not self.live_write_actions_enabled
+            ),
+            "sensitive_scan_available": True,
+            "scripts_available": all(path.exists() for path in scripts),
+            "safe_mode": not allow_external_calls and not self.live_write_actions_enabled,
+        }
+        if not checks["e2e_replay_enabled"]:
+            status = "disabled"
+            message = "Local full E2E replay orchestrator is disabled"
+        elif all(checks.values()):
+            status = "ready"
+            message = "Local full E2E replay orchestrator is ready"
+        else:
+            status = "missing_config"
+            message = "Local full E2E replay needs scripts, writable output, replay dependencies, and external calls disabled"
+        return ExternalDependencyStatus(
+            name="local_e2e_replay",
+            mode="local_full_e2e_replay_orchestrator",
             status=status,
             required=False,
             message=message,

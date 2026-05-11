@@ -10,6 +10,7 @@ from app.services.external_readiness_service import ExternalReadinessService
 from app.services.kuaijingvs_discovery_service import KuaJingVSDiscoveryService
 from app.services.kuaijingvs_discovery_hardening_service import KuaJingVSDiscoveryHardeningService
 from app.services.local_contract_replay_service import LocalContractReplayService
+from app.services.local_e2e_replay_service import LocalE2EReplayService
 from app.services.local_persistence_replay_service import LocalPersistenceReplayService
 from app.services.yingdao_desktop_smoke_service import YingdaoDesktopSmokeService
 from app.services.yingdao_form_fill_simulator_service import YingdaoFormFillSimulatorService
@@ -50,6 +51,12 @@ local_contract_replay_service = LocalContractReplayService(account_binding_servi
 local_persistence_replay_service = LocalPersistenceReplayService(
     contract_replay_service=local_contract_replay_service,
     account_binding_service=xhs_account_binding_service,
+)
+local_e2e_replay_service = LocalE2EReplayService(
+    readiness_service=readiness_service,
+    account_binding_service=xhs_account_binding_service,
+    contract_replay_service=local_contract_replay_service,
+    persistence_replay_service=local_persistence_replay_service,
 )
 
 
@@ -271,6 +278,45 @@ class XhsPersistenceReplayApiRequest(BaseModel):
     source_replay_summary_path: str | None = None
     strict_mode: bool = True
     dry_run: bool = True
+
+
+class XhsE2EReplaySearchApiRequest(BaseModel):
+    """Request for local full E2E search replay."""
+
+    run_id: str
+    job_id: str
+    account_id: str
+    keyword: str
+    limit: int = 20
+
+
+class XhsE2EReplayPublishApiRequest(BaseModel):
+    """Request for local full E2E publish replay."""
+
+    run_id: str
+    job_id: str
+    account_id: str
+    title: str
+    body: str
+    tags: list[str] = Field(default_factory=list)
+    image_paths: list[str] = Field(default_factory=list)
+    publish_mode: str = "manual_review"
+
+
+class XhsE2EReplayAllApiRequest(BaseModel):
+    """Request for local full E2E search plus publish replay."""
+
+    run_id: str
+    account_id: str
+    search_job_id: str | None = None
+    publish_job_id: str | None = None
+    keyword: str
+    limit: int = 20
+    title: str
+    body: str
+    tags: list[str] = Field(default_factory=list)
+    image_paths: list[str] = Field(default_factory=list)
+    publish_mode: str = "manual_review"
 
 
 @router.get("/api/workflows/xhs/external-readiness", response_model=None)
@@ -1076,6 +1122,66 @@ def replay_all_publish_persistence(job: XhsPersistenceReplayApiRequest) -> dict 
     return _replay_persistence_all("publish", job)
 
 
+@router.post("/api/workflows/xhs/e2e-replay/search", response_model=None)
+def replay_search_e2e(job: XhsE2EReplaySearchApiRequest) -> dict | JSONResponse:
+    """Run local full E2E search replay without real external calls."""
+    try:
+        result = local_e2e_replay_service.replay_search(
+            run_id=job.run_id,
+            job_id=job.job_id,
+            account_id=job.account_id,
+            keyword=job.keyword,
+            limit=job.limit,
+        )
+        _append_e2e_replay_audit("local_e2e_replay_search", result)
+        return _model_to_dict(result)
+    except WorkerError as exc:
+        return JSONResponse(status_code=400, content=error_to_dict(exc))
+
+
+@router.post("/api/workflows/xhs/e2e-replay/publish", response_model=None)
+def replay_publish_e2e(job: XhsE2EReplayPublishApiRequest) -> dict | JSONResponse:
+    """Run local full E2E publish replay without real external calls."""
+    try:
+        result = local_e2e_replay_service.replay_publish(
+            run_id=job.run_id,
+            job_id=job.job_id,
+            account_id=job.account_id,
+            title=job.title,
+            body=job.body,
+            tags=job.tags,
+            image_paths=job.image_paths,
+            publish_mode=job.publish_mode,
+        )
+        _append_e2e_replay_audit("local_e2e_replay_publish", result)
+        return _model_to_dict(result)
+    except WorkerError as exc:
+        return JSONResponse(status_code=400, content=error_to_dict(exc))
+
+
+@router.post("/api/workflows/xhs/e2e-replay/all", response_model=None)
+def replay_all_e2e(job: XhsE2EReplayAllApiRequest) -> dict | JSONResponse:
+    """Run local full E2E search and publish replay without real external calls."""
+    try:
+        result = local_e2e_replay_service.replay_all(
+            run_id=job.run_id,
+            account_id=job.account_id,
+            keyword=job.keyword,
+            limit=job.limit,
+            title=job.title,
+            body=job.body,
+            tags=job.tags,
+            image_paths=job.image_paths,
+            publish_mode=job.publish_mode,
+            search_job_id=job.search_job_id,
+            publish_job_id=job.publish_job_id,
+        )
+        _append_e2e_replay_audit("local_e2e_replay_all", result)
+        return _model_to_dict(result)
+    except WorkerError as exc:
+        return JSONResponse(status_code=400, content=error_to_dict(exc))
+
+
 @router.get("/api/workflows/xhs/account-binding/search/{job_id}/verify", response_model=None)
 def verify_xhs_account_binding_search(job_id: str) -> dict | JSONResponse:
     """Verify search account binding confirmation."""
@@ -1601,6 +1707,32 @@ def _append_persistence_replay_all_audit(result) -> None:
                 "minio_status": (result.minio or {}).get("status") if result.minio else None,
                 "result_path": result.result_path,
                 "summary_path": result.summary_path,
+            },
+        )
+    except Exception:
+        pass
+
+
+def _append_e2e_replay_audit(event_type: str, result) -> None:
+    """Append audit for local full E2E replay without sensitive payloads."""
+    try:
+        audit_log_service.append_event(
+            event_type=event_type,
+            job_id=result.run_id,
+            status=result.status,
+            error_code=result.error_code,
+            message="local full E2E replay completed",
+            actor="local_api",
+            metadata={
+                "run_id": result.run_id,
+                "job_type": result.job_type,
+                "e2e_input_path": result.e2e_input_path,
+                "e2e_result_path": result.e2e_result_path,
+                "e2e_summary_path": result.e2e_summary_path,
+                "artifacts_manifest_path": result.artifacts_manifest_path,
+                "step_statuses": [{"step_name": step.step_name, "status": step.status} for step in result.steps],
+                "sensitive_payload_detected": result.sensitive_payload_detected,
+                "external_call_forbidden": result.external_call_forbidden,
             },
         )
     except Exception:

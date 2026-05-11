@@ -147,6 +147,12 @@ from app.schemas.xhs_persistence_replay import (
     XhsPersistenceReplaySummary,
     XhsPostgresMockPersistencePayload,
 )
+from app.schemas.xhs_e2e_replay import (
+    XhsE2EReplayRequest,
+    XhsE2EReplayResult,
+    XhsE2EReplayStepResult,
+    XhsE2EReplaySummary,
+)
 
 __all__ = [
     "PublishJob",
@@ -269,4 +275,8 @@ __all__ = [
     "XhsPersistenceReplayResult",
     "XhsPersistenceReplaySummary",
     "XhsPersistenceReplayAllResult",
+    "XhsE2EReplayRequest",
+    "XhsE2EReplayStepResult",
+    "XhsE2EReplayResult",
+    "XhsE2EReplaySummary",
 ]

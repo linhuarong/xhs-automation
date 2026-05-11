@@ -1583,3 +1583,36 @@ Run all publish persistence replay:
 ```
 
 Target-specific scripts are available for Feishu, PostgreSQL, and MinIO search/publish replay. Common errors include source contract replay missing/invalid, strict binding missing/failed, hardened discovery missing/unsafe, sensitive payload detected, unsupported target, and external write forbidden.
+
+## Local Full E2E Replay Orchestrator
+
+Task 40 adds a local-only E2E replay orchestrator. It chains readiness, strict account binding, hardened discovery, local n8n/OpenClaw contract replay, and local Feishu/PostgreSQL/MinIO mock persistence replay into one checkpoint run.
+
+It only writes local JSON under `.local_rpa_queue/e2e/{run_id}/`. It does not write real Feishu, connect real PostgreSQL, upload real MinIO, call real n8n/OpenClaw, call Yingdao OpenAPI, open shop, open Xiaohongshu, open external pages, search, or publish.
+
+Generated files:
+
+- `e2e_input.json`: local E2E input and forbidden-action boundary.
+- `e2e_result.json`: step-level checkpoint result and failure details.
+- `e2e_summary.json`: readiness, strict binding, hardened discovery, contract replay, and persistence replay status.
+- `e2e_artifacts_manifest.json`: generated local artifact references for this run.
+
+Run search E2E:
+
+```powershell
+.\scripts\xhs_e2e_replay_search.ps1 -BaseUrl "http://127.0.0.1:8000" -RunId "e2e-search-001" -JobId "search-e2e-001" -AccountId "xhs_dev_01" -Keyword "眼影" -Limit 20
+```
+
+Run publish E2E:
+
+```powershell
+.\scripts\xhs_e2e_replay_publish.ps1 -BaseUrl "http://127.0.0.1:8000" -RunId "e2e-publish-001" -JobId "publish-e2e-001" -AccountId "xhs_dev_01" -Title "测试标题" -Body "测试正文" -Tags "眼影,美妆" -ImagePaths ".local_assets\publish-e2e-001\01.png" -PublishMode "manual_review"
+```
+
+Run all E2E:
+
+```powershell
+.\scripts\xhs_e2e_replay_all.ps1 -BaseUrl "http://127.0.0.1:8000" -RunId "e2e-all-001" -AccountId "xhs_dev_01" -Keyword "眼影" -Limit 20 -Title "测试标题" -Body "测试正文" -Tags "眼影,美妆" -ImagePaths ".local_assets\publish-e2e-001\01.png" -PublishMode "manual_review"
+```
+
+Common errors include readiness failed, strict binding failed, hardened discovery failed, contract replay failed, persistence replay failed, sensitive payload detected, external call forbidden, result invalid, and artifact manifest invalid.

@@ -13,7 +13,7 @@ def test_default_readiness_safe_mode_without_env(tmp_path) -> None:
     assert result.status == "success"
     assert result.safe_mode is True
     assert result.environment == "local"
-    assert result.summary.total == 19
+    assert result.summary.total == 20
 
 
 def test_missing_kjvs_profile_map_is_missing_config(tmp_path) -> None:
@@ -404,6 +404,30 @@ def test_local_persistence_replay_dependency_is_reported(tmp_path) -> None:
     assert persistence.checks["real_postgres_write_forbidden"] is True
     assert persistence.checks["real_minio_upload_forbidden"] is True
     assert persistence.checks["persistence_scripts_available"] is True
+
+
+def test_local_e2e_replay_dependency_is_reported(tmp_path) -> None:
+    scripts = tmp_path / "scripts"
+    scripts.mkdir(exist_ok=True)
+    for script_name in [
+        "xhs_e2e_replay_search.ps1",
+        "xhs_e2e_replay_publish.ps1",
+        "xhs_e2e_replay_all.ps1",
+        "xhs_e2e_replay_runbook.txt",
+    ]:
+        (scripts / script_name).write_text("", encoding="utf-8")
+
+    result = ExternalReadinessService(env={}, worker_root=tmp_path).check_all()
+    e2e = _dependency(result, "local_e2e_replay")
+
+    assert e2e.mode == "local_full_e2e_replay_orchestrator"
+    assert e2e.checks["e2e_replay_enabled"] is True
+    assert e2e.checks["contract_replay_available"] is True
+    assert e2e.checks["persistence_replay_available"] is True
+    assert e2e.checks["strict_binding_required"] is True
+    assert e2e.checks["hardened_discovery_required"] is True
+    assert e2e.checks["real_external_calls_forbidden"] is True
+    assert e2e.checks["scripts_available"] is True
 
 
 def test_readiness_reads_existing_discovery_evidence_without_live_call(tmp_path) -> None:

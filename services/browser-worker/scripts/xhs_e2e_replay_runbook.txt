@@ -1,0 +1,32 @@
+XHS Local Full E2E Replay Runbook
+
+Purpose:
+- Run one local-only checkpoint chain across readiness, strict binding, hardened discovery, contract replay, and mock persistence replay.
+- All outputs are local JSON files under .local_rpa_queue/e2e/{run_id}/.
+
+Safety boundary:
+- Do not write real Feishu.
+- Do not connect real PostgreSQL.
+- Do not upload real MinIO.
+- Do not call real n8n.
+- Do not call real OpenClaw.
+- Do not call Yingdao OpenAPI.
+- Do not open shop.
+- Do not close shop.
+- Do not open Xiaohongshu.
+- Do not open external webpages.
+- Do not search.
+- Do not publish.
+- Do not click real publish.
+
+Order:
+1. Make sure local hardened discovery exists.
+2. Make sure strict account binding can pass for the account_id.
+3. Run xhs_e2e_replay_search.ps1 or xhs_e2e_replay_publish.ps1.
+4. For both paths, run xhs_e2e_replay_all.ps1.
+5. Inspect e2e_input.json, e2e_result.json, e2e_summary.json, and e2e_artifacts_manifest.json.
+
+Expected result:
+- status is success when every local checkpoint passes.
+- status is failed when readiness, strict binding, hardened discovery, contract replay, persistence replay, or sensitive scan fails.
+- Failures still write local E2E result files for diagnosis.
