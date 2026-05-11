@@ -1,0 +1,20 @@
+Local Feishu/PostgreSQL/MinIO Mock Persistence Replay Runbook
+
+1. Start browser-worker locally.
+2. Run Task 38 contract replay first for the same job_id.
+3. Run xhs_persistence_replay_all.ps1 with JobType search or publish.
+4. Review .local_rpa_queue/persistence/<target>/<job_type>/<job_id>/persistence_payload.json.
+5. Review .local_rpa_queue/persistence/<target>/<job_type>/<job_id>/persistence_result.json.
+6. Review .local_rpa_queue/persistence/<target>/<job_type>/<job_id>/persistence_summary.json.
+7. MinIO mock uses object_manifest.json only.
+8. Do not write real Feishu.
+9. Do not connect real PostgreSQL.
+10. Do not upload real MinIO.
+11. Do not call real n8n.
+12. Do not call real OpenClaw.
+13. Do not call Yingdao cloud API.
+14. 不要 open shop.
+15. 不要打开小红书.
+16. 不要打开外部网页.
+17. 不要点击真实发布.
+18. Do not store token, cookie, secret, password, auth, or header values.

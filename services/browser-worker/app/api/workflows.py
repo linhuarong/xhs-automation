@@ -10,6 +10,7 @@ from app.services.external_readiness_service import ExternalReadinessService
 from app.services.kuaijingvs_discovery_service import KuaJingVSDiscoveryService
 from app.services.kuaijingvs_discovery_hardening_service import KuaJingVSDiscoveryHardeningService
 from app.services.local_contract_replay_service import LocalContractReplayService
+from app.services.local_persistence_replay_service import LocalPersistenceReplayService
 from app.services.yingdao_desktop_smoke_service import YingdaoDesktopSmokeService
 from app.services.yingdao_form_fill_simulator_service import YingdaoFormFillSimulatorService
 from app.services.yingdao_local_html_sandbox_service import YingdaoLocalHtmlSandboxService
@@ -46,6 +47,10 @@ yingdao_selector_mapping_service = YingdaoSelectorMappingService()
 yingdao_actual_form_fill_service = YingdaoActualFormFillSmokeService()
 xhs_account_binding_service = XhsAccountBindingService()
 local_contract_replay_service = LocalContractReplayService(account_binding_service=xhs_account_binding_service)
+local_persistence_replay_service = LocalPersistenceReplayService(
+    contract_replay_service=local_contract_replay_service,
+    account_binding_service=xhs_account_binding_service,
+)
 
 
 class YingdaoPublishHandoffRequest(BaseModel):
@@ -255,6 +260,17 @@ class XhsOpenClawStatusReplayRequest(BaseModel):
     job_id: str
     job_type: str
     account_id: str
+
+
+class XhsPersistenceReplayApiRequest(BaseModel):
+    """Request for local Feishu/PostgreSQL/MinIO mock persistence replay."""
+
+    job_id: str
+    account_id: str
+    source_replay_result_path: str | None = None
+    source_replay_summary_path: str | None = None
+    strict_mode: bool = True
+    dry_run: bool = True
 
 
 @router.get("/api/workflows/xhs/external-readiness", response_model=None)
@@ -1012,6 +1028,54 @@ def replay_all_publish_contracts(job: XhsContractReplayPublishRequest) -> dict |
         return JSONResponse(status_code=400, content=error_to_dict(exc))
 
 
+@router.post("/api/workflows/xhs/persistence-replay/feishu/search", response_model=None)
+def replay_feishu_search_persistence(job: XhsPersistenceReplayApiRequest) -> dict | JSONResponse:
+    """Generate local Feishu search mock persistence payload without real writes."""
+    return _replay_persistence_target("feishu", "search", job)
+
+
+@router.post("/api/workflows/xhs/persistence-replay/feishu/publish", response_model=None)
+def replay_feishu_publish_persistence(job: XhsPersistenceReplayApiRequest) -> dict | JSONResponse:
+    """Generate local Feishu publish mock persistence payload without real writes."""
+    return _replay_persistence_target("feishu", "publish", job)
+
+
+@router.post("/api/workflows/xhs/persistence-replay/postgres/search", response_model=None)
+def replay_postgres_search_persistence(job: XhsPersistenceReplayApiRequest) -> dict | JSONResponse:
+    """Generate local PostgreSQL search mock persistence payload without real writes."""
+    return _replay_persistence_target("postgres", "search", job)
+
+
+@router.post("/api/workflows/xhs/persistence-replay/postgres/publish", response_model=None)
+def replay_postgres_publish_persistence(job: XhsPersistenceReplayApiRequest) -> dict | JSONResponse:
+    """Generate local PostgreSQL publish mock persistence payload without real writes."""
+    return _replay_persistence_target("postgres", "publish", job)
+
+
+@router.post("/api/workflows/xhs/persistence-replay/minio/search", response_model=None)
+def replay_minio_search_persistence(job: XhsPersistenceReplayApiRequest) -> dict | JSONResponse:
+    """Generate local MinIO search mock object manifest without real uploads."""
+    return _replay_persistence_target("minio", "search", job)
+
+
+@router.post("/api/workflows/xhs/persistence-replay/minio/publish", response_model=None)
+def replay_minio_publish_persistence(job: XhsPersistenceReplayApiRequest) -> dict | JSONResponse:
+    """Generate local MinIO publish mock object manifest without real uploads."""
+    return _replay_persistence_target("minio", "publish", job)
+
+
+@router.post("/api/workflows/xhs/persistence-replay/all/search", response_model=None)
+def replay_all_search_persistence(job: XhsPersistenceReplayApiRequest) -> dict | JSONResponse:
+    """Generate all local search mock persistence replay packages."""
+    return _replay_persistence_all("search", job)
+
+
+@router.post("/api/workflows/xhs/persistence-replay/all/publish", response_model=None)
+def replay_all_publish_persistence(job: XhsPersistenceReplayApiRequest) -> dict | JSONResponse:
+    """Generate all local publish mock persistence replay packages."""
+    return _replay_persistence_all("publish", job)
+
+
 @router.get("/api/workflows/xhs/account-binding/search/{job_id}/verify", response_model=None)
 def verify_xhs_account_binding_search(job_id: str) -> dict | JSONResponse:
     """Verify search account binding confirmation."""
@@ -1435,6 +1499,108 @@ def _append_contract_replay_all_audit(result) -> None:
                 "strict_binding_status": result.strict_binding_status,
                 "n8n_status": (result.n8n_replay or {}).get("status") if result.n8n_replay else None,
                 "openclaw_status": (result.openclaw_replay or {}).get("status") if result.openclaw_replay else None,
+            },
+        )
+    except Exception:
+        pass
+
+
+def _replay_persistence_target(target: str, job_type: str, job: XhsPersistenceReplayApiRequest) -> dict | JSONResponse:
+    """Replay one local persistence target and append audit."""
+    try:
+        if target == "feishu":
+            result = local_persistence_replay_service.replay_feishu_mock(
+                job_id=job.job_id,
+                job_type=job_type,
+                account_id=job.account_id,
+                source_replay_result_path=job.source_replay_result_path,
+                source_replay_summary_path=job.source_replay_summary_path,
+            )
+            event_type = f"local_persistence_replay_feishu_{job_type}"
+        elif target == "postgres":
+            result = local_persistence_replay_service.replay_postgres_mock(
+                job_id=job.job_id,
+                job_type=job_type,
+                account_id=job.account_id,
+                source_replay_result_path=job.source_replay_result_path,
+                source_replay_summary_path=job.source_replay_summary_path,
+            )
+            event_type = f"local_persistence_replay_postgres_{job_type}"
+        else:
+            result = local_persistence_replay_service.replay_minio_mock(
+                job_id=job.job_id,
+                job_type=job_type,
+                account_id=job.account_id,
+                source_replay_result_path=job.source_replay_result_path,
+                source_replay_summary_path=job.source_replay_summary_path,
+            )
+            event_type = f"local_persistence_replay_minio_{job_type}"
+        _append_persistence_replay_audit(event_type, result)
+        return _model_to_dict(result)
+    except WorkerError as exc:
+        return JSONResponse(status_code=400, content=error_to_dict(exc))
+
+
+def _replay_persistence_all(job_type: str, job: XhsPersistenceReplayApiRequest) -> dict | JSONResponse:
+    """Replay all local persistence targets and append audit."""
+    try:
+        result = local_persistence_replay_service.replay_all_for_job(
+            job_id=job.job_id,
+            job_type=job_type,
+            account_id=job.account_id,
+        )
+        _append_persistence_replay_all_audit(result)
+        return _model_to_dict(result)
+    except WorkerError as exc:
+        return JSONResponse(status_code=400, content=error_to_dict(exc))
+
+
+def _append_persistence_replay_audit(event_type: str, result) -> None:
+    """Append audit for local Feishu/PostgreSQL/MinIO mock persistence replay."""
+    try:
+        audit_log_service.append_event(
+            event_type=event_type,
+            job_id=result.job_id,
+            status=result.status,
+            error_code=result.error_code,
+            message="local mock persistence replay completed",
+            actor="local_api",
+            metadata={
+                "job_id": result.job_id,
+                "job_type": result.job_type,
+                "target": result.target,
+                "payload_path": result.payload_path,
+                "result_path": result.result_path,
+                "summary_path": result.summary_path,
+                "strict_binding_status": result.strict_binding_status,
+                "hardened_discovery_status": result.hardened_discovery_status,
+                "source_replay_status": result.source_replay_status,
+                "sensitive_payload_detected": result.sensitive_payload_detected,
+                "external_write_forbidden": result.external_write_forbidden,
+            },
+        )
+    except Exception:
+        pass
+
+
+def _append_persistence_replay_all_audit(result) -> None:
+    """Append audit for all local persistence replay targets."""
+    try:
+        audit_log_service.append_event(
+            event_type="local_persistence_replay_all",
+            job_id=result.job_id,
+            status=result.status,
+            error_code=result.error_code,
+            message="local persistence replay all completed",
+            actor="local_api",
+            metadata={
+                "job_id": result.job_id,
+                "job_type": result.job_type,
+                "feishu_status": (result.feishu or {}).get("status") if result.feishu else None,
+                "postgres_status": (result.postgres or {}).get("status") if result.postgres else None,
+                "minio_status": (result.minio or {}).get("status") if result.minio else None,
+                "result_path": result.result_path,
+                "summary_path": result.summary_path,
             },
         )
     except Exception:

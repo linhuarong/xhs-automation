@@ -13,7 +13,7 @@ def test_default_readiness_safe_mode_without_env(tmp_path) -> None:
     assert result.status == "success"
     assert result.safe_mode is True
     assert result.environment == "local"
-    assert result.summary.total == 18
+    assert result.summary.total == 19
 
 
 def test_missing_kjvs_profile_map_is_missing_config(tmp_path) -> None:
@@ -375,6 +375,35 @@ def test_local_contract_replay_dependency_is_reported(tmp_path) -> None:
     assert replay.checks["hardened_discovery_available"] is True
     assert replay.checks["external_n8n_call_forbidden"] is True
     assert replay.checks["external_openclaw_call_forbidden"] is True
+
+
+def test_local_persistence_replay_dependency_is_reported(tmp_path) -> None:
+    scripts = tmp_path / "scripts"
+    scripts.mkdir(exist_ok=True)
+    for script_name in [
+        "xhs_persistence_replay_feishu_search.ps1",
+        "xhs_persistence_replay_feishu_publish.ps1",
+        "xhs_persistence_replay_postgres_search.ps1",
+        "xhs_persistence_replay_postgres_publish.ps1",
+        "xhs_persistence_replay_minio_search.ps1",
+        "xhs_persistence_replay_minio_publish.ps1",
+        "xhs_persistence_replay_all.ps1",
+        "xhs_persistence_replay_runbook.txt",
+    ]:
+        (scripts / script_name).write_text("", encoding="utf-8")
+
+    result = ExternalReadinessService(env={}, worker_root=tmp_path).check_all()
+    persistence = _dependency(result, "local_persistence_replay")
+
+    assert persistence.mode == "local_feishu_postgres_minio_mock_persistence"
+    assert persistence.checks["persistence_replay_enabled"] is True
+    assert persistence.checks["feishu_mock_enabled"] is True
+    assert persistence.checks["postgres_mock_enabled"] is True
+    assert persistence.checks["minio_mock_enabled"] is True
+    assert persistence.checks["real_feishu_write_forbidden"] is True
+    assert persistence.checks["real_postgres_write_forbidden"] is True
+    assert persistence.checks["real_minio_upload_forbidden"] is True
+    assert persistence.checks["persistence_scripts_available"] is True
 
 
 def test_readiness_reads_existing_discovery_evidence_without_live_call(tmp_path) -> None:

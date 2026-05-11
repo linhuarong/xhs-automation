@@ -1556,3 +1556,30 @@ Common replay errors:
 - `XHS_CONTRACT_REPLAY_LOCAL_ROUTE_FAILED`: local mock route replay failed.
 
 Readiness includes `local_contract_replay`. It does not replay automatically, call real n8n/OpenClaw, open shops, access network, or open Xiaohongshu.
+
+## Local Feishu/PostgreSQL/MinIO Mock Persistence Replay
+
+Task 39 adds local-only persistence replay after Task 38 contract replay. It reads `replay_result.json` / `replay_summary.json`, strict account binding, and hardened discovery references, then writes local mock payloads under `.local_rpa_queue/persistence`.
+
+It does not write real Feishu, connect real PostgreSQL, upload real MinIO, call real n8n/OpenClaw, call Yingdao OpenAPI, open shop, open Xiaohongshu, open external pages, search, or publish.
+
+Generated files:
+
+- `persistence_payload.json`: Feishu/PostgreSQL mock field and table mapping.
+- `object_manifest.json`: MinIO mock object-key manifest.
+- `persistence_result.json`: local validation result.
+- `persistence_summary.json`: strict context, hardened discovery, and sensitive-scan summary.
+
+Run all search persistence replay:
+
+```powershell
+.\scripts\xhs_persistence_replay_all.ps1 -JobType "search" -BaseUrl "http://127.0.0.1:8000" -JobId "search-persist-001" -AccountId "xhs_dev_01"
+```
+
+Run all publish persistence replay:
+
+```powershell
+.\scripts\xhs_persistence_replay_all.ps1 -JobType "publish" -BaseUrl "http://127.0.0.1:8000" -JobId "publish-persist-001" -AccountId "xhs_dev_01"
+```
+
+Target-specific scripts are available for Feishu, PostgreSQL, and MinIO search/publish replay. Common errors include source contract replay missing/invalid, strict binding missing/failed, hardened discovery missing/unsafe, sensitive payload detected, unsupported target, and external write forbidden.

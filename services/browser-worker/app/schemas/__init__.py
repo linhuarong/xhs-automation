@@ -138,6 +138,15 @@ from app.schemas.xhs_contract_replay import (
     XhsN8nReplayPayload,
     XhsOpenClawReplayPayload,
 )
+from app.schemas.xhs_persistence_replay import (
+    XhsFeishuMockPersistencePayload,
+    XhsMinioMockObjectManifest,
+    XhsPersistenceReplayAllResult,
+    XhsPersistenceReplayRequest,
+    XhsPersistenceReplayResult,
+    XhsPersistenceReplaySummary,
+    XhsPostgresMockPersistencePayload,
+)
 
 __all__ = [
     "PublishJob",
@@ -253,4 +262,11 @@ __all__ = [
     "XhsContractReplayPrepareRequest",
     "XhsContractReplayPrepareResult",
     "XhsContractReplayAllResult",
+    "XhsPersistenceReplayRequest",
+    "XhsFeishuMockPersistencePayload",
+    "XhsPostgresMockPersistencePayload",
+    "XhsMinioMockObjectManifest",
+    "XhsPersistenceReplayResult",
+    "XhsPersistenceReplaySummary",
+    "XhsPersistenceReplayAllResult",
 ]

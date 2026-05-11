@@ -50,6 +50,7 @@ class ExternalReadinessService:
             self.check_postgres(),
             self.check_minio(),
             self.check_local_contract_replay(),
+            self.check_local_persistence_replay(),
             self.check_n8n_contract(),
             self.check_openclaw_contract(),
             self.check_local_storage(),
@@ -718,6 +719,57 @@ class ExternalReadinessService:
         return ExternalDependencyStatus(
             name="local_contract_replay",
             mode="local_n8n_openclaw_replay",
+            status=status,
+            required=False,
+            message=message,
+            checks=checks,
+        )
+
+    def check_local_persistence_replay(self) -> ExternalDependencyStatus:
+        """Check local Feishu/PostgreSQL/MinIO mock persistence replay readiness."""
+        persistence_root = self._resolve_worker_path(self._get("XHS_LOCAL_PERSISTENCE_REPLAY_ROOT", ".local_rpa_queue/persistence"))
+        scripts = [
+            self.worker_root / "scripts/xhs_persistence_replay_feishu_search.ps1",
+            self.worker_root / "scripts/xhs_persistence_replay_feishu_publish.ps1",
+            self.worker_root / "scripts/xhs_persistence_replay_postgres_search.ps1",
+            self.worker_root / "scripts/xhs_persistence_replay_postgres_publish.ps1",
+            self.worker_root / "scripts/xhs_persistence_replay_minio_search.ps1",
+            self.worker_root / "scripts/xhs_persistence_replay_minio_publish.ps1",
+            self.worker_root / "scripts/xhs_persistence_replay_all.ps1",
+            self.worker_root / "scripts/xhs_persistence_replay_runbook.txt",
+        ]
+        persistence_parent = persistence_root if persistence_root.exists() else persistence_root.parent
+        allow_real_feishu = self._truthy(self._get("XHS_LOCAL_PERSISTENCE_ALLOW_REAL_FEISHU", "false"))
+        allow_real_postgres = self._truthy(self._get("XHS_LOCAL_PERSISTENCE_ALLOW_REAL_POSTGRES", "false"))
+        allow_real_minio = self._truthy(self._get("XHS_LOCAL_PERSISTENCE_ALLOW_REAL_MINIO", "false"))
+        checks = {
+            "persistence_replay_enabled": self._truthy(self._get("XHS_LOCAL_PERSISTENCE_REPLAY_ENABLED", "true")),
+            "feishu_mock_enabled": self._truthy(self._get("XHS_LOCAL_PERSISTENCE_ALLOW_FEISHU_MOCK", "true")),
+            "postgres_mock_enabled": self._truthy(self._get("XHS_LOCAL_PERSISTENCE_ALLOW_POSTGRES_MOCK", "true")),
+            "minio_mock_enabled": self._truthy(self._get("XHS_LOCAL_PERSISTENCE_ALLOW_MINIO_MOCK", "true")),
+            "real_feishu_write_forbidden": not allow_real_feishu,
+            "real_postgres_write_forbidden": not allow_real_postgres,
+            "real_minio_upload_forbidden": not allow_real_minio,
+            "contract_replay_required": self._truthy(self._get("XHS_LOCAL_PERSISTENCE_REPLAY_REQUIRE_CONTRACT_REPLAY", "true")),
+            "strict_binding_required": self._truthy(self._get("XHS_LOCAL_PERSISTENCE_REPLAY_REQUIRE_STRICT_BINDING", "true")),
+            "hardened_discovery_required": self._truthy(self._get("XHS_LOCAL_PERSISTENCE_REPLAY_REQUIRE_HARDENED_DISCOVERY", "true")),
+            "sensitive_scan_available": True,
+            "persistence_queue_writable": persistence_parent.exists() and os.access(persistence_parent, os.W_OK),
+            "persistence_scripts_available": all(path.exists() for path in scripts),
+            "safe_mode": not allow_real_feishu and not allow_real_postgres and not allow_real_minio and not self.live_write_actions_enabled,
+        }
+        if not checks["persistence_replay_enabled"]:
+            status = "disabled"
+            message = "Local persistence replay is disabled"
+        elif all(checks.values()):
+            status = "ready"
+            message = "Local Feishu/PostgreSQL/MinIO mock persistence replay is ready"
+        else:
+            status = "missing_config"
+            message = "Local persistence replay needs scripts, writable queue, mock targets, and real-write flags disabled"
+        return ExternalDependencyStatus(
+            name="local_persistence_replay",
+            mode="local_feishu_postgres_minio_mock_persistence",
             status=status,
             required=False,
             message=message,
