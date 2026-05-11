@@ -34,6 +34,33 @@
 - docs/06_browser-worker开发规范.md
 - docs/07_n8n工作流规范.md
 
+做 Codex / agent 协作、任务拆分、问题诊断、窗口交接相关任务前，先读取：
+- CONTEXT.md
+- docs/agents/xhs-agent-rules.md
+- docs/agents/xhs-task-template.md
+- docs/agents/xhs-handoff-template.md
+
+## Agent Skills 使用规则
+
+本仓库维护项目专用 skills，位于：
+
+```text
+.agents/skills/
+```
+
+当前启用的项目专用 skills：
+
+- `xhs-task-slice`：当用户给出较大的开发目标、下一阶段规划、继续任务、拆 Task、准备给 Codex 的 prompt 时使用。
+- `xhs-diagnose`：当 pytest、local replay、provider、YingdaoService、KuaJingVSOpenAPI、evidence JSON、normalized_records 等出现失败时使用。
+- `xhs-handoff`：当需要新窗口交接、更新进度、总结当前任务、生成下一窗口启动提示时使用。
+
+使用原则：
+
+1. 先使用专用 `xhs-*` skills，再考虑通用工程习惯。
+2. 每次只处理一个小任务，不做大范围重构。
+3. 优先读取 `CONTEXT.md` 中的共享术语，避免重复解释项目背景。
+4. 结束时按固定格式输出：修改文件、测试命令、测试结果、风险/未完成项、是否需要人工 review。
+
 ## 禁止事项
 
 - 不允许调用小红书未授权接口。
