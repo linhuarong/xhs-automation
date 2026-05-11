@@ -1,0 +1,37 @@
+XHS PostgreSQL Persistence Phase 1 Runbook
+
+Purpose:
+- Read the local Task 39 PostgreSQL mock persistence payload.
+- Build a PostgreSQL insert plan.
+- In dry-run mode, write only local JSON evidence.
+- Only write a local PostgreSQL database when explicitly enabled.
+
+Default safety:
+- XHS_POSTGRES_PERSISTENCE_ENABLED=false
+- XHS_ALLOW_REAL_POSTGRES_WRITE=false
+- XHS_POSTGRES_PERSISTENCE_DRY_RUN=true
+- Dry-run does not connect to PostgreSQL.
+
+Safety boundary:
+- Do not write real Feishu.
+- Do not upload real MinIO.
+- Do not call real n8n.
+- Do not call real OpenClaw.
+- Do not call Yingdao OpenAPI.
+- Do not open shop.
+- Do not open Xiaohongshu.
+- Do not open external webpages.
+- Do not search.
+- Do not publish.
+- Do not put token, cookie, secret, password, auth, or header values in payloads.
+
+Dry-run steps:
+1. Generate local E2E or local persistence replay for the job.
+2. Run xhs_postgres_persist_search_replay.ps1 or xhs_postgres_persist_publish_replay.ps1 with DryRun true.
+3. Inspect .local_rpa_queue/postgres_persistence/{search|publish}/{job_id}/postgres_persistence_plan.json.
+4. Inspect postgres_persistence_result.json and postgres_persistence_summary.json.
+
+Schema:
+1. Run xhs_postgres_schema_check.ps1 to confirm the schema file exists and browser-worker is reachable.
+2. xhs_postgres_apply_schema.ps1 is dry-run unless -ConfirmApply is provided.
+3. Only use a local PostgreSQL DSN with -ConfirmApply.

@@ -12,6 +12,7 @@ from app.services.kuaijingvs_discovery_hardening_service import KuaJingVSDiscove
 from app.services.local_contract_replay_service import LocalContractReplayService
 from app.services.local_e2e_replay_service import LocalE2EReplayService
 from app.services.local_persistence_replay_service import LocalPersistenceReplayService
+from app.services.postgres_persistence_service import PostgresPersistenceService
 from app.services.yingdao_desktop_smoke_service import YingdaoDesktopSmokeService
 from app.services.yingdao_form_fill_simulator_service import YingdaoFormFillSimulatorService
 from app.services.yingdao_local_html_sandbox_service import YingdaoLocalHtmlSandboxService
@@ -29,6 +30,7 @@ from app.utils.errors import (
     XHS_YINGDAO_ACTUAL_FORM_FILL_ERROR,
     XHS_ACCOUNT_BINDING_ERROR,
     XHS_KJVS_DISCOVERY_HARDENING_ERROR,
+    XHS_POSTGRES_PERSISTENCE_ERROR,
     error_to_dict,
     make_error_result,
     WorkerError,
@@ -58,6 +60,7 @@ local_e2e_replay_service = LocalE2EReplayService(
     contract_replay_service=local_contract_replay_service,
     persistence_replay_service=local_persistence_replay_service,
 )
+postgres_persistence_service = PostgresPersistenceService()
 
 
 class YingdaoPublishHandoffRequest(BaseModel):
@@ -317,6 +320,16 @@ class XhsE2EReplayAllApiRequest(BaseModel):
     tags: list[str] = Field(default_factory=list)
     image_paths: list[str] = Field(default_factory=list)
     publish_mode: str = "manual_review"
+
+
+class XhsPostgresPersistenceApiRequest(BaseModel):
+    """Request for controlled PostgreSQL persistence from replay payload."""
+
+    job_id: str
+    account_id: str
+    persistence_payload_path: str | None = None
+    dry_run: bool = True
+    require_safe_payload: bool = True
 
 
 @router.get("/api/workflows/xhs/external-readiness", response_model=None)
@@ -1182,6 +1195,50 @@ def replay_all_e2e(job: XhsE2EReplayAllApiRequest) -> dict | JSONResponse:
         return JSONResponse(status_code=400, content=error_to_dict(exc))
 
 
+@router.post("/api/workflows/xhs/postgres-persistence/search", response_model=None)
+def persist_search_replay_to_postgres(job: XhsPostgresPersistenceApiRequest) -> dict | JSONResponse:
+    """Dry-run or explicitly persist search replay payload to PostgreSQL."""
+    try:
+        from app.schemas import XhsPostgresPersistenceRequest
+
+        result = postgres_persistence_service.persist_search_replay(
+            XhsPostgresPersistenceRequest(
+                job_id=job.job_id,
+                job_type="search",
+                account_id=job.account_id,
+                persistence_payload_path=job.persistence_payload_path,
+                dry_run=job.dry_run,
+                require_safe_payload=job.require_safe_payload,
+            )
+        )
+        _append_postgres_persistence_audit("postgres_persistence_search", result)
+        return _model_to_dict(result)
+    except WorkerError as exc:
+        return JSONResponse(status_code=400, content=error_to_dict(exc))
+
+
+@router.post("/api/workflows/xhs/postgres-persistence/publish", response_model=None)
+def persist_publish_replay_to_postgres(job: XhsPostgresPersistenceApiRequest) -> dict | JSONResponse:
+    """Dry-run or explicitly persist publish replay payload to PostgreSQL."""
+    try:
+        from app.schemas import XhsPostgresPersistenceRequest
+
+        result = postgres_persistence_service.persist_publish_replay(
+            XhsPostgresPersistenceRequest(
+                job_id=job.job_id,
+                job_type="publish",
+                account_id=job.account_id,
+                persistence_payload_path=job.persistence_payload_path,
+                dry_run=job.dry_run,
+                require_safe_payload=job.require_safe_payload,
+            )
+        )
+        _append_postgres_persistence_audit("postgres_persistence_publish", result)
+        return _model_to_dict(result)
+    except WorkerError as exc:
+        return JSONResponse(status_code=400, content=error_to_dict(exc))
+
+
 @router.get("/api/workflows/xhs/account-binding/search/{job_id}/verify", response_model=None)
 def verify_xhs_account_binding_search(job_id: str) -> dict | JSONResponse:
     """Verify search account binding confirmation."""
@@ -1733,6 +1790,36 @@ def _append_e2e_replay_audit(event_type: str, result) -> None:
                 "step_statuses": [{"step_name": step.step_name, "status": step.status} for step in result.steps],
                 "sensitive_payload_detected": result.sensitive_payload_detected,
                 "external_call_forbidden": result.external_call_forbidden,
+            },
+        )
+    except Exception:
+        pass
+
+
+def _append_postgres_persistence_audit(event_type: str, result) -> None:
+    """Append audit for controlled PostgreSQL persistence without sensitive payloads."""
+    try:
+        audit_log_service.append_event(
+            event_type=event_type,
+            job_id=result.job_id,
+            status=result.status,
+            error_code=result.error_code,
+            message="controlled PostgreSQL persistence completed",
+            actor="local_api",
+            metadata={
+                "job_id": result.job_id,
+                "job_type": result.job_type,
+                "account_id": result.account_id,
+                "dry_run": result.dry_run,
+                "rows_planned": result.rows_planned,
+                "rows_written": result.rows_written,
+                "target_tables": result.target_tables,
+                "payload_path": result.payload_path,
+                "plan_path": result.plan_path,
+                "result_path": result.result_path,
+                "summary_path": result.summary_path,
+                "postgres_write_enabled": result.postgres_write_enabled,
+                "sensitive_payload_detected": result.sensitive_payload_detected,
             },
         )
     except Exception:

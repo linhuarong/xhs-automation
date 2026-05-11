@@ -48,6 +48,7 @@ class ExternalReadinessService:
             self.check_xhs_account_binding_strict_mode(),
             self.check_feishu(),
             self.check_postgres(),
+            self.check_postgres_persistence(),
             self.check_minio(),
             self.check_local_contract_replay(),
             self.check_local_persistence_replay(),
@@ -623,6 +624,46 @@ class ExternalReadinessService:
             if not configured
             else "PostgreSQL DSN is configured for future dry-run readiness",
             checks={"dsn_configured": configured},
+        )
+
+    def check_postgres_persistence(self) -> ExternalDependencyStatus:
+        """Check controlled PostgreSQL persistence readiness without connecting to PostgreSQL."""
+        output_root = self._resolve_worker_path(self._get("XHS_POSTGRES_PERSISTENCE_OUTPUT_ROOT", ".local_rpa_queue/postgres_persistence"))
+        output_parent = output_root if output_root.exists() else output_root.parent
+        schema_path = self._resolve_worker_path(self._get("XHS_POSTGRES_SCHEMA_PATH", "database/xhs_persistence_schema.sql"))
+        enabled = self._truthy(self._get("XHS_POSTGRES_PERSISTENCE_ENABLED", "false"))
+        write_allowed = self._truthy(self._get("XHS_ALLOW_REAL_POSTGRES_WRITE", "false"))
+        dry_run = self._truthy(self._get("XHS_POSTGRES_PERSISTENCE_DRY_RUN", "true"))
+        checks = {
+            "postgres_persistence_enabled": enabled,
+            "postgres_write_allowed": write_allowed,
+            "postgres_dry_run": dry_run,
+            "postgres_dsn_configured": self._configured("POSTGRES_DSN"),
+            "postgres_schema_file_exists": schema_path.exists(),
+            "postgres_output_dir_writable": output_parent.exists() and os.access(output_parent, os.W_OK),
+            "sensitive_scan_available": True,
+            "mock_mode_default_safe": (not enabled) and (not write_allowed) and dry_run,
+            "real_write_requires_explicit_flag": not write_allowed or enabled,
+        }
+        if not enabled:
+            status = "disabled"
+            message = "Controlled PostgreSQL persistence is disabled; dry-run mode remains safe"
+        elif dry_run and checks["postgres_schema_file_exists"] and checks["postgres_output_dir_writable"]:
+            status = "ready"
+            message = "Controlled PostgreSQL persistence dry-run is ready"
+        elif enabled and write_allowed and checks["postgres_dsn_configured"] and checks["postgres_schema_file_exists"]:
+            status = "ready"
+            message = "Controlled PostgreSQL persistence real-write flags are explicitly enabled"
+        else:
+            status = "missing_config"
+            message = "Controlled PostgreSQL persistence needs schema, output dir, and explicit write flags for real writes"
+        return ExternalDependencyStatus(
+            name="postgres_persistence",
+            mode="controlled_real_postgres_persistence",
+            status=status,
+            required=False,
+            message=message,
+            checks=checks,
         )
 
     def check_minio(self) -> ExternalDependencyStatus:

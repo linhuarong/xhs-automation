@@ -1616,3 +1616,55 @@ Run all E2E:
 ```
 
 Common errors include readiness failed, strict binding failed, hardened discovery failed, contract replay failed, persistence replay failed, sensitive payload detected, external call forbidden, result invalid, and artifact manifest invalid.
+
+## PostgreSQL Real Persistence Adapter Phase 1
+
+Task 41 adds controlled PostgreSQL persistence from the local Task 39 PostgreSQL replay payload. By default it is safe dry-run only:
+
+- `XHS_POSTGRES_PERSISTENCE_ENABLED=false`
+- `XHS_ALLOW_REAL_POSTGRES_WRITE=false`
+- `XHS_POSTGRES_PERSISTENCE_DRY_RUN=true`
+
+Dry-run reads `.local_rpa_queue/persistence/postgres/{search|publish}/{job_id}/persistence_payload.json`, builds an insert plan, and writes local evidence under `.local_rpa_queue/postgres_persistence/{search|publish}/{job_id}/`. It does not connect to PostgreSQL and does not write the database.
+
+Generated files:
+
+- `postgres_persistence_plan.json`: planned target tables, columns, and values.
+- `postgres_persistence_result.json`: dry-run/write result, rows planned, rows written, and error details.
+- `postgres_persistence_summary.json`: payload scan, target tables, and forbidden-action summary.
+
+Schema file:
+
+```text
+database/xhs_persistence_schema.sql
+```
+
+The schema defines `xhs_search_evidence`, `xhs_search_records`, `xhs_publish_evidence`, `xhs_publish_jobs`, `xhs_task_log`, and `xhs_workflow_log` with indexes for `job_id`, `account_id`, `keyword` where applicable, and `created_at`.
+
+Check schema and readiness:
+
+```powershell
+.\scripts\xhs_postgres_schema_check.ps1 -BaseUrl "http://127.0.0.1:8000"
+```
+
+Apply schema is dry-run unless `-ConfirmApply` is provided:
+
+```powershell
+.\scripts\xhs_postgres_apply_schema.ps1 -SchemaPath "database\xhs_persistence_schema.sql"
+```
+
+Dry-run persist search replay:
+
+```powershell
+.\scripts\xhs_postgres_persist_search_replay.ps1 -BaseUrl "http://127.0.0.1:8000" -JobId "search-pg-001" -AccountId "xhs_dev_01" -DryRun
+```
+
+Dry-run persist publish replay:
+
+```powershell
+.\scripts\xhs_postgres_persist_publish_replay.ps1 -BaseUrl "http://127.0.0.1:8000" -JobId "publish-pg-001" -AccountId "xhs_dev_01" -DryRun
+```
+
+Real PostgreSQL writes require all of these at the same time: `dry_run=false`, `XHS_POSTGRES_PERSISTENCE_ENABLED=true`, and `XHS_ALLOW_REAL_POSTGRES_WRITE=true`. The service rejects payloads containing token, cookie, secret, password, auth, authorization, header, Bearer, or session-like values.
+
+Task 41 does not write Feishu, upload MinIO, call real n8n/OpenClaw, call Yingdao OpenAPI, open shop, open Xiaohongshu, open external pages, search, or publish.

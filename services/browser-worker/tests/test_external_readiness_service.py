@@ -13,7 +13,7 @@ def test_default_readiness_safe_mode_without_env(tmp_path) -> None:
     assert result.status == "success"
     assert result.safe_mode is True
     assert result.environment == "local"
-    assert result.summary.total == 20
+    assert result.summary.total == 21
 
 
 def test_missing_kjvs_profile_map_is_missing_config(tmp_path) -> None:
@@ -404,6 +404,23 @@ def test_local_persistence_replay_dependency_is_reported(tmp_path) -> None:
     assert persistence.checks["real_postgres_write_forbidden"] is True
     assert persistence.checks["real_minio_upload_forbidden"] is True
     assert persistence.checks["persistence_scripts_available"] is True
+
+
+def test_postgres_persistence_dependency_is_reported_as_safe_by_default(tmp_path) -> None:
+    schema = tmp_path / "database" / "xhs_persistence_schema.sql"
+    schema.parent.mkdir(parents=True)
+    schema.write_text("CREATE TABLE IF NOT EXISTS xhs_task_log(id bigserial primary key);", encoding="utf-8")
+
+    result = ExternalReadinessService(env={}, worker_root=tmp_path).check_all()
+    postgres_persistence = _dependency(result, "postgres_persistence")
+
+    assert postgres_persistence.mode == "controlled_real_postgres_persistence"
+    assert postgres_persistence.status == "disabled"
+    assert postgres_persistence.checks["postgres_persistence_enabled"] is False
+    assert postgres_persistence.checks["postgres_write_allowed"] is False
+    assert postgres_persistence.checks["postgres_dry_run"] is True
+    assert postgres_persistence.checks["postgres_schema_file_exists"] is True
+    assert postgres_persistence.checks["mock_mode_default_safe"] is True
 
 
 def test_local_e2e_replay_dependency_is_reported(tmp_path) -> None:
