@@ -1716,3 +1716,36 @@ Generate a publish upload plan:
 Real MinIO upload requires all of these at the same time: `dry_run=false`, `XHS_MINIO_UPLOAD_ENABLED=true`, `XHS_ALLOW_REAL_MINIO_UPLOAD=true`, configured endpoint, bucket, access key, and secret key, existing source files, safe object keys, and a passing sensitive-file scan.
 
 The adapter refuses `.env`, `.config`, credential, token, cookie, profile, session, localStorage, cache, and similar sensitive paths. Task 42 does not open Xiaohongshu, call Yingdao, open or close KuaJingVS shops, call real Feishu, or trigger real n8n/OpenClaw.
+
+## Feishu Real Write Adapter Phase 1
+
+Task 43 adds a controlled Feishu write adapter. It is payload-first and dry-run by default:
+
+- `XHS_FEISHU_WRITE_ENABLED=false`
+- `XHS_ALLOW_REAL_FEISHU_WRITE=false`
+
+Dry-run builds Feishu write plans and API-shaped payloads, then writes local evidence under:
+
+```text
+.local_rpa_queue/feishu_write/{search|publish}/{job_id}/
+  feishu_write_plan.json
+  feishu_write_payload.json
+  feishu_write_result.json
+  feishu_write_summary.json
+```
+
+Generate a search write payload:
+
+```powershell
+.\scripts\xhs_feishu_plan_search_write.ps1 -BaseUrl "http://127.0.0.1:8000" -JobId "search-feishu-001" -AccountId "xhs_dev_01" -DryRun
+```
+
+Generate a publish write payload:
+
+```powershell
+.\scripts\xhs_feishu_plan_publish_write.ps1 -BaseUrl "http://127.0.0.1:8000" -JobId "publish-feishu-001" -AccountId "xhs_dev_01" -DryRun
+```
+
+Real Feishu writes require all of these at the same time: `dry_run=false`, `XHS_FEISHU_WRITE_ENABLED=true`, `XHS_ALLOW_REAL_FEISHU_WRITE=true`, configured app id, app secret, app token, and target table id, a payload that passes sensitive scanning, and an operation of `create` or `update`. Update operations must include `feishu_record_id`.
+
+The adapter rejects payloads containing token, cookie, secret, password, auth, authorization, header, `.env`, `.config`, browser profile, session, or localStorage-like values. It does not print or write app secret, tenant token, app token, or table id into plan/result/summary JSON. Task 43 does not open Xiaohongshu, call Yingdao, open or close KuaJingVS shops, upload MinIO objects, write PostgreSQL, or trigger real n8n/OpenClaw.

@@ -1,0 +1,31 @@
+Feishu Real Write Adapter Phase 1 Runbook
+
+Purpose:
+1. Generate local Feishu write plans and payloads.
+2. Keep dry-run enabled by default.
+3. Review feishu_write_plan.json and feishu_write_payload.json before any real write.
+
+Safety:
+- Do not print or copy app secret, app token, table id, tenant token, cookie, or password.
+- Do not write real Feishu unless both explicit environment switches are enabled and dry_run=false.
+- Do not open Xiaohongshu.
+- Do not call Yingdao.
+- Do not open or close KuaJingVS shops.
+- Do not upload MinIO objects.
+- Do not write PostgreSQL.
+- Do not trigger real n8n or OpenClaw.
+
+Search dry-run:
+.\scripts\xhs_feishu_plan_search_write.ps1 -BaseUrl "http://127.0.0.1:8000" -JobId "search-feishu-001" -AccountId "xhs_dev_01" -DryRun
+
+Publish dry-run:
+.\scripts\xhs_feishu_plan_publish_write.ps1 -BaseUrl "http://127.0.0.1:8000" -JobId "publish-feishu-001" -AccountId "xhs_dev_01" -DryRun
+
+Real write gate:
+1. XHS_FEISHU_WRITE_ENABLED=true
+2. XHS_ALLOW_REAL_FEISHU_WRITE=true
+3. Request dry_run=false
+4. Feishu app id, app secret, app token, and target table id are configured
+5. Payload scan passes
+6. Operation is create or update
+7. Update includes feishu_record_id

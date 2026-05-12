@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 from app.schemas import ExternalReadinessResult, KuaJingVSDiscoveryHardenResult, KuaJingVSDiscoveryResult, SearchJob, WorkerResult
 from app.services.audit_log_service import AuditLogService
 from app.services.external_readiness_service import ExternalReadinessService
+from app.services.feishu_write_service import FeishuWriteService
 from app.services.kuaijingvs_discovery_service import KuaJingVSDiscoveryService
 from app.services.kuaijingvs_discovery_hardening_service import KuaJingVSDiscoveryHardeningService
 from app.services.local_contract_replay_service import LocalContractReplayService
@@ -64,6 +65,7 @@ local_e2e_replay_service = LocalE2EReplayService(
 )
 postgres_persistence_service = PostgresPersistenceService()
 minio_storage_service = MinioStorageService()
+feishu_write_service = FeishuWriteService()
 
 
 class YingdaoPublishHandoffRequest(BaseModel):
@@ -347,6 +349,23 @@ class XhsMinioStorageApiRequest(BaseModel):
     overwrite: bool = False
     include_optional_missing: bool = True
     object_prefix: str | None = None
+
+
+class XhsFeishuWriteApiRequest(BaseModel):
+    """Request for controlled Feishu write planning or explicit write."""
+
+    job_id: str
+    account_id: str | None = None
+    operation: str = "upsert_plan_only"
+    feishu_record_id: str | None = None
+    source_result_path: str | None = None
+    source_summary_path: str | None = None
+    records: list[dict] | None = None
+    dry_run: bool = True
+    table_id: str | None = None
+    app_token: str | None = None
+    field_mapping: dict[str, str] | None = None
+    include_raw_payload: bool = True
 
 
 @router.get("/api/workflows/xhs/external-readiness", response_model=None)
@@ -1308,6 +1327,64 @@ def plan_or_upload_publish_to_minio(job: XhsMinioStorageApiRequest) -> dict | JS
         return JSONResponse(status_code=400, content=error_to_dict(exc))
 
 
+@router.post("/api/workflows/xhs/feishu-write/search", response_model=None)
+def plan_or_write_search_to_feishu(job: XhsFeishuWriteApiRequest) -> dict | JSONResponse:
+    """Dry-run or explicitly write search payload to Feishu."""
+    try:
+        from app.schemas import XhsFeishuWriteRequest
+
+        result = feishu_write_service.plan_or_write_search(
+            XhsFeishuWriteRequest(
+                job_id=job.job_id,
+                job_type="search",
+                account_id=job.account_id,
+                operation=job.operation,
+                feishu_record_id=job.feishu_record_id,
+                source_result_path=job.source_result_path,
+                source_summary_path=job.source_summary_path,
+                records=job.records,
+                dry_run=job.dry_run,
+                table_id=job.table_id,
+                app_token=job.app_token,
+                field_mapping=job.field_mapping,
+                include_raw_payload=job.include_raw_payload,
+            )
+        )
+        _append_feishu_write_audit("feishu_write_search", result)
+        return _model_to_dict(result)
+    except WorkerError as exc:
+        return JSONResponse(status_code=400, content=error_to_dict(exc))
+
+
+@router.post("/api/workflows/xhs/feishu-write/publish", response_model=None)
+def plan_or_write_publish_to_feishu(job: XhsFeishuWriteApiRequest) -> dict | JSONResponse:
+    """Dry-run or explicitly write publish payload to Feishu."""
+    try:
+        from app.schemas import XhsFeishuWriteRequest
+
+        result = feishu_write_service.plan_or_write_publish(
+            XhsFeishuWriteRequest(
+                job_id=job.job_id,
+                job_type="publish",
+                account_id=job.account_id,
+                operation=job.operation,
+                feishu_record_id=job.feishu_record_id,
+                source_result_path=job.source_result_path,
+                source_summary_path=job.source_summary_path,
+                records=job.records,
+                dry_run=job.dry_run,
+                table_id=job.table_id,
+                app_token=job.app_token,
+                field_mapping=job.field_mapping,
+                include_raw_payload=job.include_raw_payload,
+            )
+        )
+        _append_feishu_write_audit("feishu_write_publish", result)
+        return _model_to_dict(result)
+    except WorkerError as exc:
+        return JSONResponse(status_code=400, content=error_to_dict(exc))
+
+
 @router.get("/api/workflows/xhs/account-binding/search/{job_id}/verify", response_model=None)
 def verify_xhs_account_binding_search(job_id: str) -> dict | JSONResponse:
     """Verify search account binding confirmation."""
@@ -1919,6 +1996,38 @@ def _append_minio_storage_audit(event_type: str, result) -> None:
                 "result_path": result.result_path,
                 "summary_path": result.summary_path,
                 "sensitive_file_detected": result.sensitive_file_detected,
+            },
+        )
+    except Exception:
+        pass
+
+
+def _append_feishu_write_audit(event_type: str, result) -> None:
+    """Append audit for controlled Feishu writes without credentials."""
+    try:
+        audit_log_service.append_event(
+            event_type=event_type,
+            job_id=result.job_id,
+            status=result.status,
+            error_code=result.error_code,
+            message="controlled Feishu write planning completed",
+            actor="local_api",
+            metadata={
+                "job_id": result.job_id,
+                "job_type": result.job_type,
+                "account_id": result.account_id,
+                "operation": result.operation,
+                "dry_run": result.dry_run,
+                "target_table_kind": result.target_table_kind,
+                "record_count": result.record_count,
+                "written_count": result.written_count,
+                "write_enabled": result.write_enabled,
+                "real_write_allowed": result.real_write_allowed,
+                "plan_path": result.plan_path,
+                "payload_path": result.payload_path,
+                "result_path": result.result_path,
+                "summary_path": result.summary_path,
+                "sensitive_payload_detected": result.sensitive_payload_detected,
             },
         )
     except Exception:

@@ -13,7 +13,7 @@ def test_default_readiness_safe_mode_without_env(tmp_path) -> None:
     assert result.status == "success"
     assert result.safe_mode is True
     assert result.environment == "local"
-    assert result.summary.total == 22
+    assert result.summary.total == 23
 
 
 def test_missing_kjvs_profile_map_is_missing_config(tmp_path) -> None:
@@ -443,6 +443,28 @@ def test_controlled_minio_storage_dependency_is_reported_as_safe_by_default(tmp_
     assert minio_storage.checks["minio_dry_run_default"] is True
     assert minio_storage.checks["scripts_available"] is True
     assert minio_storage.checks["safe_mode"] is True
+
+
+def test_controlled_feishu_write_dependency_is_reported_as_safe_by_default(tmp_path) -> None:
+    scripts = tmp_path / "scripts"
+    scripts.mkdir(exist_ok=True)
+    for script_name in [
+        "xhs_feishu_plan_search_write.ps1",
+        "xhs_feishu_plan_publish_write.ps1",
+        "xhs_feishu_write_runbook.txt",
+    ]:
+        (scripts / script_name).write_text("", encoding="utf-8")
+
+    result = ExternalReadinessService(env={}, worker_root=tmp_path).check_all()
+    feishu_write = _dependency(result, "controlled_feishu_write")
+
+    assert feishu_write.mode == "controlled_real_feishu_write"
+    assert feishu_write.status == "disabled"
+    assert feishu_write.checks["feishu_write_enabled"] is False
+    assert feishu_write.checks["real_feishu_write_allowed"] is False
+    assert feishu_write.checks["feishu_dry_run_default"] is True
+    assert feishu_write.checks["scripts_available"] is True
+    assert feishu_write.checks["safe_mode"] is True
 
 
 def test_local_e2e_replay_dependency_is_reported(tmp_path) -> None:

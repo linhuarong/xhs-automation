@@ -167,6 +167,15 @@ from app.schemas.xhs_minio_storage import (
     XhsMinioUploadSource,
     XhsMinioUploadSummary,
 )
+from app.schemas.xhs_feishu_write import (
+    XhsFeishuFieldMapping,
+    XhsFeishuWritePayload,
+    XhsFeishuWritePlan,
+    XhsFeishuWritePlanItem,
+    XhsFeishuWriteRequest,
+    XhsFeishuWriteResult,
+    XhsFeishuWriteSummary,
+)
 
 __all__ = [
     "PublishJob",
@@ -303,4 +312,11 @@ __all__ = [
     "XhsMinioUploadResultItem",
     "XhsMinioUploadResult",
     "XhsMinioUploadSummary",
+    "XhsFeishuFieldMapping",
+    "XhsFeishuWriteRequest",
+    "XhsFeishuWritePlanItem",
+    "XhsFeishuWritePlan",
+    "XhsFeishuWritePayload",
+    "XhsFeishuWriteResult",
+    "XhsFeishuWriteSummary",
 ]

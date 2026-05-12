@@ -47,6 +47,7 @@ class ExternalReadinessService:
             self.check_xhs_account_binding(),
             self.check_xhs_account_binding_strict_mode(),
             self.check_feishu(),
+            self.check_controlled_feishu_write(),
             self.check_postgres(),
             self.check_postgres_persistence(),
             self.check_minio(),
@@ -610,6 +611,64 @@ class ExternalReadinessService:
             status="mock_ready" if not ready else "ready",
             required=False,
             message="Feishu adapter is available in mock mode" if not ready else "Feishu config placeholders are present",
+            checks=checks,
+        )
+
+    def check_controlled_feishu_write(self) -> ExternalDependencyStatus:
+        """Check controlled Feishu write adapter without network or real writes."""
+        output_root = self._resolve_worker_path(self._get("XHS_FEISHU_WRITE_OUTPUT_ROOT", ".local_rpa_queue/feishu_write"))
+        output_parent = output_root if output_root.exists() else output_root.parent
+        scripts = [
+            self.worker_root / "scripts/xhs_feishu_plan_search_write.ps1",
+            self.worker_root / "scripts/xhs_feishu_plan_publish_write.ps1",
+            self.worker_root / "scripts/xhs_feishu_write_runbook.txt",
+        ]
+        enabled = self._truthy(self._get("XHS_FEISHU_WRITE_ENABLED", "false"))
+        real_write_allowed = self._truthy(self._get("XHS_ALLOW_REAL_FEISHU_WRITE", "false"))
+        checks = {
+            "feishu_write_enabled": enabled,
+            "real_feishu_write_allowed": real_write_allowed,
+            "feishu_dry_run_default": True,
+            "api_base_url_configured": self._value_configured(self._get("XHS_FEISHU_API_BASE_URL", "https://open.feishu.cn")),
+            "app_id_configured": self._value_configured(self._get("XHS_FEISHU_APP_ID", self._get("FEISHU_APP_ID", ""))),
+            "app_secret_configured": self._value_configured(self._get("XHS_FEISHU_APP_SECRET", self._get("FEISHU_APP_SECRET", ""))),
+            "app_token_configured": self._value_configured(self._get("XHS_FEISHU_APP_TOKEN", "")),
+            "search_table_configured": self._value_configured(self._get("XHS_FEISHU_SEARCH_TABLE_ID", "")),
+            "publish_table_configured": self._value_configured(self._get("XHS_FEISHU_PUBLISH_TABLE_ID", "")),
+            "feishu_output_dir_writable": output_parent.exists() and os.access(output_parent, os.W_OK),
+            "sensitive_scan_available": True,
+            "scripts_available": all(path.exists() for path in scripts),
+            "safe_mode": not real_write_allowed and not self.live_write_actions_enabled,
+        }
+        if not enabled:
+            status = "disabled"
+            message = "Controlled Feishu write is disabled; dry-run payload planning remains safe"
+        elif checks["feishu_output_dir_writable"] and checks["scripts_available"] and not real_write_allowed:
+            status = "ready"
+            message = "Controlled Feishu write dry-run planning is ready"
+        elif enabled and real_write_allowed and all(
+            checks[key]
+            for key in (
+                "api_base_url_configured",
+                "app_id_configured",
+                "app_secret_configured",
+                "app_token_configured",
+                "search_table_configured",
+                "publish_table_configured",
+                "feishu_output_dir_writable",
+            )
+        ):
+            status = "ready"
+            message = "Controlled Feishu write real-write flags are explicitly enabled"
+        else:
+            status = "missing_config"
+            message = "Controlled Feishu write needs scripts, output dir, and explicit config for real writes"
+        return ExternalDependencyStatus(
+            name="controlled_feishu_write",
+            mode="controlled_real_feishu_write",
+            status=status,
+            required=False,
+            message=message,
             checks=checks,
         )
 
