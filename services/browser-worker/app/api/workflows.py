@@ -12,6 +12,7 @@ from app.services.kuaijingvs_discovery_hardening_service import KuaJingVSDiscove
 from app.services.local_contract_replay_service import LocalContractReplayService
 from app.services.local_e2e_replay_service import LocalE2EReplayService
 from app.services.local_persistence_replay_service import LocalPersistenceReplayService
+from app.services.minio_storage_service import MinioStorageService
 from app.services.postgres_persistence_service import PostgresPersistenceService
 from app.services.yingdao_desktop_smoke_service import YingdaoDesktopSmokeService
 from app.services.yingdao_form_fill_simulator_service import YingdaoFormFillSimulatorService
@@ -30,6 +31,7 @@ from app.utils.errors import (
     XHS_YINGDAO_ACTUAL_FORM_FILL_ERROR,
     XHS_ACCOUNT_BINDING_ERROR,
     XHS_KJVS_DISCOVERY_HARDENING_ERROR,
+    MINIO_UPLOAD_FAILED,
     XHS_POSTGRES_PERSISTENCE_ERROR,
     error_to_dict,
     make_error_result,
@@ -61,6 +63,7 @@ local_e2e_replay_service = LocalE2EReplayService(
     persistence_replay_service=local_persistence_replay_service,
 )
 postgres_persistence_service = PostgresPersistenceService()
+minio_storage_service = MinioStorageService()
 
 
 class YingdaoPublishHandoffRequest(BaseModel):
@@ -330,6 +333,20 @@ class XhsPostgresPersistenceApiRequest(BaseModel):
     persistence_payload_path: str | None = None
     dry_run: bool = True
     require_safe_payload: bool = True
+
+
+class XhsMinioStorageApiRequest(BaseModel):
+    """Request for controlled MinIO storage planning or upload."""
+
+    job_id: str
+    account_id: str
+    provider_type: str | None = None
+    evidence_dir: str | None = None
+    sources: list[dict] | None = None
+    dry_run: bool = True
+    overwrite: bool = False
+    include_optional_missing: bool = True
+    object_prefix: str | None = None
 
 
 @router.get("/api/workflows/xhs/external-readiness", response_model=None)
@@ -1239,6 +1256,58 @@ def persist_publish_replay_to_postgres(job: XhsPostgresPersistenceApiRequest) ->
         return JSONResponse(status_code=400, content=error_to_dict(exc))
 
 
+@router.post("/api/workflows/xhs/minio-storage/search", response_model=None)
+def plan_or_upload_search_to_minio(job: XhsMinioStorageApiRequest) -> dict | JSONResponse:
+    """Dry-run or explicitly upload search artifacts to MinIO."""
+    try:
+        from app.schemas import XhsMinioStorageRequest, XhsMinioUploadSource
+
+        result = minio_storage_service.upload_search_artifacts(
+            XhsMinioStorageRequest(
+                job_id=job.job_id,
+                job_type="search",
+                account_id=job.account_id,
+                provider_type=job.provider_type,
+                evidence_dir=job.evidence_dir,
+                sources=[XhsMinioUploadSource(**item) for item in job.sources] if job.sources else None,
+                dry_run=job.dry_run,
+                overwrite=job.overwrite,
+                include_optional_missing=job.include_optional_missing,
+                object_prefix=job.object_prefix,
+            )
+        )
+        _append_minio_storage_audit("minio_storage_search", result)
+        return _model_to_dict(result)
+    except WorkerError as exc:
+        return JSONResponse(status_code=400, content=error_to_dict(exc))
+
+
+@router.post("/api/workflows/xhs/minio-storage/publish", response_model=None)
+def plan_or_upload_publish_to_minio(job: XhsMinioStorageApiRequest) -> dict | JSONResponse:
+    """Dry-run or explicitly upload publish artifacts to MinIO."""
+    try:
+        from app.schemas import XhsMinioStorageRequest, XhsMinioUploadSource
+
+        result = minio_storage_service.upload_publish_artifacts(
+            XhsMinioStorageRequest(
+                job_id=job.job_id,
+                job_type="publish",
+                account_id=job.account_id,
+                provider_type=job.provider_type,
+                evidence_dir=job.evidence_dir,
+                sources=[XhsMinioUploadSource(**item) for item in job.sources] if job.sources else None,
+                dry_run=job.dry_run,
+                overwrite=job.overwrite,
+                include_optional_missing=job.include_optional_missing,
+                object_prefix=job.object_prefix,
+            )
+        )
+        _append_minio_storage_audit("minio_storage_publish", result)
+        return _model_to_dict(result)
+    except WorkerError as exc:
+        return JSONResponse(status_code=400, content=error_to_dict(exc))
+
+
 @router.get("/api/workflows/xhs/account-binding/search/{job_id}/verify", response_model=None)
 def verify_xhs_account_binding_search(job_id: str) -> dict | JSONResponse:
     """Verify search account binding confirmation."""
@@ -1820,6 +1889,36 @@ def _append_postgres_persistence_audit(event_type: str, result) -> None:
                 "summary_path": result.summary_path,
                 "postgres_write_enabled": result.postgres_write_enabled,
                 "sensitive_payload_detected": result.sensitive_payload_detected,
+            },
+        )
+    except Exception:
+        pass
+
+
+def _append_minio_storage_audit(event_type: str, result) -> None:
+    """Append audit for controlled MinIO storage without credentials."""
+    try:
+        audit_log_service.append_event(
+            event_type=event_type,
+            job_id=result.job_id,
+            status=result.status,
+            error_code=result.error_code,
+            message="controlled MinIO storage completed",
+            actor="local_api",
+            metadata={
+                "job_id": result.job_id,
+                "job_type": result.job_type,
+                "account_id": result.account_id,
+                "dry_run": result.dry_run,
+                "bucket": result.bucket,
+                "upload_enabled": result.upload_enabled,
+                "real_upload_allowed": result.real_upload_allowed,
+                "uploaded_count": result.uploaded_count,
+                "skipped_count": result.skipped_count,
+                "plan_path": result.plan_path,
+                "result_path": result.result_path,
+                "summary_path": result.summary_path,
+                "sensitive_file_detected": result.sensitive_file_detected,
             },
         )
     except Exception:

@@ -50,6 +50,7 @@ class ExternalReadinessService:
             self.check_postgres(),
             self.check_postgres_persistence(),
             self.check_minio(),
+            self.check_minio_real_storage(),
             self.check_local_contract_replay(),
             self.check_local_persistence_replay(),
             self.check_local_e2e_replay(),
@@ -683,6 +684,54 @@ class ExternalReadinessService:
             message="MinIO storage adapter is available in local mock mode"
             if not ready
             else "MinIO config placeholders are present",
+            checks=checks,
+        )
+
+    def check_minio_real_storage(self) -> ExternalDependencyStatus:
+        """Check controlled MinIO storage adapter without uploading."""
+        storage_root = self._resolve_worker_path(self._get("XHS_MINIO_STORAGE_OUTPUT_ROOT", ".local_rpa_queue/minio_storage"))
+        storage_parent = storage_root if storage_root.exists() else storage_root.parent
+        scripts = [
+            self.worker_root / "scripts/xhs_minio_plan_search_upload.ps1",
+            self.worker_root / "scripts/xhs_minio_plan_publish_upload.ps1",
+            self.worker_root / "scripts/xhs_minio_storage_runbook.txt",
+        ]
+        upload_enabled = self._truthy(self._get("XHS_MINIO_UPLOAD_ENABLED", "false"))
+        real_upload_allowed = self._truthy(self._get("XHS_ALLOW_REAL_MINIO_UPLOAD", "false"))
+        checks = {
+            "minio_upload_enabled": upload_enabled,
+            "real_minio_upload_allowed": real_upload_allowed,
+            "minio_dry_run_default": True,
+            "endpoint_configured": self._value_configured(self._get("XHS_MINIO_ENDPOINT", self._get("MINIO_ENDPOINT", ""))),
+            "bucket_configured": self._value_configured(self._get("XHS_MINIO_BUCKET", self._get("MINIO_BUCKET", ""))),
+            "access_key_configured": self._value_configured(self._get("XHS_MINIO_ACCESS_KEY", self._get("MINIO_ACCESS_KEY", ""))),
+            "secret_key_configured": self._value_configured(self._get("XHS_MINIO_SECRET_KEY", self._get("MINIO_SECRET_KEY", ""))),
+            "minio_output_dir_writable": storage_parent.exists() and os.access(storage_parent, os.W_OK),
+            "sensitive_scan_available": True,
+            "scripts_available": all(path.exists() for path in scripts),
+            "safe_mode": not real_upload_allowed and not self.live_write_actions_enabled,
+        }
+        if not upload_enabled:
+            status = "disabled"
+            message = "Controlled MinIO storage is disabled; dry-run manifest planning remains safe"
+        elif checks["minio_output_dir_writable"] and checks["scripts_available"] and not real_upload_allowed:
+            status = "ready"
+            message = "Controlled MinIO storage dry-run planning is ready"
+        elif upload_enabled and real_upload_allowed and all(
+            checks[key]
+            for key in ("endpoint_configured", "bucket_configured", "access_key_configured", "secret_key_configured", "minio_output_dir_writable")
+        ):
+            status = "ready"
+            message = "Controlled MinIO storage real-upload flags are explicitly enabled"
+        else:
+            status = "missing_config"
+            message = "Controlled MinIO storage needs scripts, output dir, and explicit config for real uploads"
+        return ExternalDependencyStatus(
+            name="controlled_minio_storage",
+            mode="controlled_real_minio_storage",
+            status=status,
+            required=False,
+            message=message,
             checks=checks,
         )
 

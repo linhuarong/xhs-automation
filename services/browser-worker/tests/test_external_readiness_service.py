@@ -13,7 +13,7 @@ def test_default_readiness_safe_mode_without_env(tmp_path) -> None:
     assert result.status == "success"
     assert result.safe_mode is True
     assert result.environment == "local"
-    assert result.summary.total == 21
+    assert result.summary.total == 22
 
 
 def test_missing_kjvs_profile_map_is_missing_config(tmp_path) -> None:
@@ -421,6 +421,28 @@ def test_postgres_persistence_dependency_is_reported_as_safe_by_default(tmp_path
     assert postgres_persistence.checks["postgres_dry_run"] is True
     assert postgres_persistence.checks["postgres_schema_file_exists"] is True
     assert postgres_persistence.checks["mock_mode_default_safe"] is True
+
+
+def test_controlled_minio_storage_dependency_is_reported_as_safe_by_default(tmp_path) -> None:
+    scripts = tmp_path / "scripts"
+    scripts.mkdir(exist_ok=True)
+    for script_name in [
+        "xhs_minio_plan_search_upload.ps1",
+        "xhs_minio_plan_publish_upload.ps1",
+        "xhs_minio_storage_runbook.txt",
+    ]:
+        (scripts / script_name).write_text("", encoding="utf-8")
+
+    result = ExternalReadinessService(env={}, worker_root=tmp_path).check_all()
+    minio_storage = _dependency(result, "controlled_minio_storage")
+
+    assert minio_storage.mode == "controlled_real_minio_storage"
+    assert minio_storage.status == "disabled"
+    assert minio_storage.checks["minio_upload_enabled"] is False
+    assert minio_storage.checks["real_minio_upload_allowed"] is False
+    assert minio_storage.checks["minio_dry_run_default"] is True
+    assert minio_storage.checks["scripts_available"] is True
+    assert minio_storage.checks["safe_mode"] is True
 
 
 def test_local_e2e_replay_dependency_is_reported(tmp_path) -> None:

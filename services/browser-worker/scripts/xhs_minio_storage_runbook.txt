@@ -1,0 +1,28 @@
+Task 42 MinIO storage runbook
+
+Purpose:
+Generate local MinIO upload plans for XHS evidence artifacts. Default mode is dry-run.
+
+Safety boundary:
+- Do not upload .env files.
+- Do not upload .config files.
+- Do not upload credential, token, cookie, profile, session, localStorage, or cache files.
+- Do not open Xiaohongshu.
+- Do not call Yingdao.
+- Do not open or close KuaJingVS shops.
+- Do not call real Feishu, n8n, or OpenClaw.
+
+Search dry-run:
+.\scripts\xhs_minio_plan_search_upload.ps1 -BaseUrl "http://127.0.0.1:8000" -JobId "search-minio-001" -AccountId "xhs_dev_01" -EvidenceDir ".local_evidence\search-minio-001" -DryRun
+
+Publish dry-run:
+.\scripts\xhs_minio_plan_publish_upload.ps1 -BaseUrl "http://127.0.0.1:8000" -JobId "publish-minio-001" -AccountId "xhs_dev_01" -EvidenceDir ".local_evidence\publish-minio-001" -DryRun
+
+Real upload requires all of these:
+- XHS_MINIO_UPLOAD_ENABLED=true
+- XHS_ALLOW_REAL_MINIO_UPLOAD=true
+- API request dry_run=false
+- Endpoint, bucket, access key, and secret key configured
+- Every source file exists and passes sensitive scan
+
+If any condition is missing, the adapter fails safe and writes local result JSON.

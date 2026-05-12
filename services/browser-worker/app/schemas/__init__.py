@@ -158,6 +158,15 @@ from app.schemas.xhs_postgres_persistence import (
     XhsPostgresPersistenceResult,
     XhsPostgresPersistenceSummary,
 )
+from app.schemas.xhs_minio_storage import (
+    XhsMinioStorageRequest,
+    XhsMinioUploadPlan,
+    XhsMinioUploadPlanItem,
+    XhsMinioUploadResult,
+    XhsMinioUploadResultItem,
+    XhsMinioUploadSource,
+    XhsMinioUploadSummary,
+)
 
 __all__ = [
     "PublishJob",
@@ -287,4 +296,11 @@ __all__ = [
     "XhsPostgresPersistenceRequest",
     "XhsPostgresPersistenceResult",
     "XhsPostgresPersistenceSummary",
+    "XhsMinioUploadSource",
+    "XhsMinioStorageRequest",
+    "XhsMinioUploadPlanItem",
+    "XhsMinioUploadPlan",
+    "XhsMinioUploadResultItem",
+    "XhsMinioUploadResult",
+    "XhsMinioUploadSummary",
 ]

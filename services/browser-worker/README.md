@@ -1668,3 +1668,51 @@ Dry-run persist publish replay:
 Real PostgreSQL writes require all of these at the same time: `dry_run=false`, `XHS_POSTGRES_PERSISTENCE_ENABLED=true`, and `XHS_ALLOW_REAL_POSTGRES_WRITE=true`. The service rejects payloads containing token, cookie, secret, password, auth, authorization, header, Bearer, or session-like values.
 
 Task 41 does not write Feishu, upload MinIO, call real n8n/OpenClaw, call Yingdao OpenAPI, open shop, open Xiaohongshu, open external pages, search, or publish.
+
+## MinIO Real Object Storage Adapter Phase 1
+
+Task 42 adds a controlled MinIO object storage adapter. It is manifest-first and dry-run by default:
+
+- `XHS_MINIO_UPLOAD_ENABLED=false`
+- `XHS_ALLOW_REAL_MINIO_UPLOAD=false`
+
+Dry-run builds an upload plan from explicit `sources` or a local `evidence_dir`, then writes local evidence under:
+
+```text
+.local_rpa_queue/minio_storage/{search|publish}/{job_id}/
+  upload_plan.json
+  upload_result.json
+  upload_summary.json
+```
+
+Search `evidence_dir` auto-discovers:
+
+- `search_evidence.json`
+- `normalized_evidence.json`
+- `xhs_search_smoke.png`
+- `xhs_search_before_scroll.png`
+- `error.json`
+
+Publish `evidence_dir` auto-discovers:
+
+- `publish_evidence.json`
+- `publish_before.png`
+- `publish_form_filled.png`
+- `publish_result.png`
+- `error.json`
+
+Generate a search upload plan:
+
+```powershell
+.\scripts\xhs_minio_plan_search_upload.ps1 -BaseUrl "http://127.0.0.1:8000" -JobId "search-minio-001" -AccountId "xhs_dev_01" -EvidenceDir ".local_evidence\search-minio-001" -DryRun
+```
+
+Generate a publish upload plan:
+
+```powershell
+.\scripts\xhs_minio_plan_publish_upload.ps1 -BaseUrl "http://127.0.0.1:8000" -JobId "publish-minio-001" -AccountId "xhs_dev_01" -EvidenceDir ".local_evidence\publish-minio-001" -DryRun
+```
+
+Real MinIO upload requires all of these at the same time: `dry_run=false`, `XHS_MINIO_UPLOAD_ENABLED=true`, `XHS_ALLOW_REAL_MINIO_UPLOAD=true`, configured endpoint, bucket, access key, and secret key, existing source files, safe object keys, and a passing sensitive-file scan.
+
+The adapter refuses `.env`, `.config`, credential, token, cookie, profile, session, localStorage, cache, and similar sensitive paths. Task 42 does not open Xiaohongshu, call Yingdao, open or close KuaJingVS shops, call real Feishu, or trigger real n8n/OpenClaw.
