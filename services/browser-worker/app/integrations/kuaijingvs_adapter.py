@@ -53,9 +53,7 @@ class KuaJingVSAdapter:
         """List KuaJingVS shops through GET /v1/shops only."""
         self.assert_live_readonly_enabled()
         response = self._get_json("/shops?page=1&size=50")
-        shops = response.get("shops") or response.get("data") or response.get("records") or []
-        if isinstance(shops, dict):
-            shops = shops.get("list") or shops.get("items") or shops.get("records") or []
+        shops = self._extract_shops(response)
         if not isinstance(shops, list):
             raise WorkerError(
                 error_code=XHS_KJVS_RESPONSE_INVALID,
@@ -69,9 +67,11 @@ class KuaJingVSAdapter:
         shop_id = raw.get("shop_id") or raw.get("shopId") or raw.get("id")
         shop_name = raw.get("shop_name") or raw.get("shopName") or raw.get("name")
         safe_keys = [str(key) for key in raw.keys() if not self._is_sensitive_key(str(key))]
+        safe_raw = {str(key): value for key, value in raw.items() if not self._is_sensitive_key(str(key))}
         return {
             "shop_id": str(shop_id) if shop_id is not None else None,
             "shop_name": str(shop_name) if shop_name is not None else None,
+            "raw": safe_raw,
             "raw_keys": sorted(safe_keys),
         }
 
@@ -136,6 +136,34 @@ class KuaJingVSAdapter:
         """Read from injected env mapping or process environment."""
         source = self.env if self.env is not None else os.environ
         return source.get(name, default)
+
+    def _extract_shops(self, response: dict[str, Any]) -> Any:
+        """Extract shop list from known KuaJingVS readonly response shapes."""
+        candidates = [
+            response.get("shops"),
+            response.get("data"),
+            (response.get("data") or {}).get("shops") if isinstance(response.get("data"), dict) else None,
+            (response.get("data") or {}).get("list") if isinstance(response.get("data"), dict) else None,
+            response.get("result"),
+            (response.get("result") or {}).get("shops") if isinstance(response.get("result"), dict) else None,
+            (response.get("result") or {}).get("list") if isinstance(response.get("result"), dict) else None,
+            (response.get("result") or {}).get("datas") if isinstance(response.get("result"), dict) else None,
+            response.get("records"),
+        ]
+        for candidate in candidates:
+            if isinstance(candidate, list):
+                return candidate
+            if isinstance(candidate, dict):
+                nested = (
+                    candidate.get("shops")
+                    or candidate.get("list")
+                    or candidate.get("datas")
+                    or candidate.get("items")
+                    or candidate.get("records")
+                )
+                if isinstance(nested, list):
+                    return nested
+        return []
 
     def _is_sensitive_key(self, key: str) -> bool:
         """Return whether a raw response key appears sensitive."""

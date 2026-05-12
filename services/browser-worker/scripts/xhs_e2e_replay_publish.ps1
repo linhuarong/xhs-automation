@@ -18,25 +18,43 @@ if ($BaseUrl -notmatch '^http://(127\.0\.0\.1|localhost)(:\d+)?$') {
 }
 
 $tagList = @()
-if ($Tags.Trim().Length -gt 0) {
-  $tagList = $Tags.Split(",") | ForEach-Object { $_.Trim() } | Where-Object { $_.Length -gt 0 }
-}
-$imagePathList = @()
-if ($ImagePaths.Trim().Length -gt 0) {
-  $imagePathList = $ImagePaths.Split(",") | ForEach-Object { $_.Trim() } | Where-Object { $_.Length -gt 0 }
+if (-not [string]::IsNullOrWhiteSpace($Tags)) {
+  $tagList = @(
+    $Tags -split "\s*,\s*" |
+      ForEach-Object { $_.Trim() } |
+      Where-Object { $_.Length -gt 0 }
+  )
 }
 
-$bodyJson = @{
+$imagePathList = @()
+if (-not [string]::IsNullOrWhiteSpace($ImagePaths)) {
+  $imagePathList = @(
+    $ImagePaths -split "\s*,\s*" |
+      ForEach-Object { $_.Trim() } |
+      Where-Object { $_.Length -gt 0 }
+  )
+}
+
+$payload = @{
   run_id = $RunId
   job_id = $JobId
   account_id = $AccountId
   title = $Title
   body = $Body
-  tags = $tagList
-  image_paths = $imagePathList
+  tags = @($tagList)
+  image_paths = @($imagePathList)
   publish_mode = $PublishMode
-} | ConvertTo-Json -Depth 8
+}
+
+$bodyJson = $payload | ConvertTo-Json -Depth 8
+$bodyBytes = [System.Text.Encoding]::UTF8.GetBytes($bodyJson)
 
 $url = "$BaseUrl/api/workflows/xhs/e2e-replay/publish"
-$response = Invoke-RestMethod -Method Post -Uri $url -ContentType "application/json; charset=utf-8" -Body $bodyJson
+
+$response = Invoke-RestMethod `
+  -Method Post `
+  -Uri $url `
+  -ContentType "application/json; charset=utf-8" `
+  -Body $bodyBytes
+
 $response | ConvertTo-Json -Depth 20
