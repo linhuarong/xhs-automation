@@ -1,0 +1,49 @@
+Feishu controlled real-write smoke runbook
+
+Purpose
+- Verify exactly one Feishu search or publish smoke record.
+- Keep the default path dry-run and payload-first.
+- Use only records marked with XHS_SMOKE and Task44.
+
+Dry-run first
+1. Start browser-worker locally.
+2. Run xhs_feishu_real_write_smoke.ps1 without -RealWrite.
+3. Review feishu_smoke_request.json, feishu_smoke_result.json, and feishu_smoke_summary.json.
+4. Confirm the payload contains XHS_SMOKE, Task44, timestamp, and job_id.
+
+Before real write
+1. Confirm the target Feishu table is a test table.
+2. Set only local environment variables. Do not commit .env.
+3. Required flags:
+   - XHS_FEISHU_WRITE_ENABLED=true
+   - XHS_ALLOW_REAL_FEISHU_WRITE=true
+   - XHS_FEISHU_SMOKE_ENABLED=true
+4. Then add -RealWrite to the script command.
+
+Create smoke
+- Use Operation=create.
+- Write only one record.
+- Search the Feishu table for XHS_SMOKE after the run.
+- Manually delete or mark the test record after review.
+
+Update smoke
+- Use Operation=update.
+- Provide FeishuRecordId.
+- Do not scan or bulk update a table.
+
+Safety boundary
+- Do not write batches to real Feishu.
+- Do not print or copy credentials.
+- Do not open Xiaohongshu.
+- Do not call Yingdao.
+- Do not open shop.
+- Do not call real MinIO upload.
+- Do not write real PostgreSQL.
+- Do not trigger real n8n or OpenClaw.
+- Do not commit .env or .local_rpa_queue outputs.
+
+Example dry-run
+.\scripts\xhs_feishu_real_write_smoke.ps1 -JobType "search" -Operation "create" -JobId "feishu-smoke-search-001" -AccountId "xhs_dev_01"
+
+Example real-write smoke
+.\scripts\xhs_feishu_real_write_smoke.ps1 -JobType "search" -Operation "create" -JobId "feishu-smoke-search-001" -AccountId "xhs_dev_01" -RealWrite

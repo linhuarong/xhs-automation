@@ -622,12 +622,18 @@ class ExternalReadinessService:
             self.worker_root / "scripts/xhs_feishu_plan_search_write.ps1",
             self.worker_root / "scripts/xhs_feishu_plan_publish_write.ps1",
             self.worker_root / "scripts/xhs_feishu_write_runbook.txt",
+            self.worker_root / "scripts/xhs_feishu_real_write_smoke.ps1",
+            self.worker_root / "scripts/xhs_feishu_real_write_smoke_runbook.txt",
         ]
         enabled = self._truthy(self._get("XHS_FEISHU_WRITE_ENABLED", "false"))
         real_write_allowed = self._truthy(self._get("XHS_ALLOW_REAL_FEISHU_WRITE", "false"))
+        smoke_enabled = self._truthy(self._get("XHS_FEISHU_SMOKE_ENABLED", "false"))
+        smoke_marker_required = self._truthy(self._get("XHS_FEISHU_SMOKE_REQUIRE_MARKER", "true"))
         checks = {
             "feishu_write_enabled": enabled,
             "real_feishu_write_allowed": real_write_allowed,
+            "feishu_smoke_enabled": smoke_enabled,
+            "feishu_smoke_marker_required": smoke_marker_required,
             "feishu_dry_run_default": True,
             "api_base_url_configured": self._value_configured(self._get("XHS_FEISHU_API_BASE_URL", "https://open.feishu.cn")),
             "app_id_configured": self._value_configured(self._get("XHS_FEISHU_APP_ID", self._get("FEISHU_APP_ID", ""))),

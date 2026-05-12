@@ -1749,3 +1749,30 @@ Generate a publish write payload:
 Real Feishu writes require all of these at the same time: `dry_run=false`, `XHS_FEISHU_WRITE_ENABLED=true`, `XHS_ALLOW_REAL_FEISHU_WRITE=true`, configured app id, app secret, app token, and target table id, a payload that passes sensitive scanning, and an operation of `create` or `update`. Update operations must include `feishu_record_id`.
 
 The adapter rejects payloads containing token, cookie, secret, password, auth, authorization, header, `.env`, `.config`, browser profile, session, or localStorage-like values. It does not print or write app secret, tenant token, app token, or table id into plan/result/summary JSON. Task 43 does not open Xiaohongshu, call Yingdao, open or close KuaJingVS shops, upload MinIO objects, write PostgreSQL, or trigger real n8n/OpenClaw.
+
+## Feishu Controlled Real-Write Smoke
+
+Task 44 adds a manual smoke wrapper around the Task 43 Feishu write adapter. The default remains dry-run. The smoke script writes local evidence under:
+
+```text
+.local_rpa_queue/feishu_smoke/{search|publish}/{job_id}/
+  feishu_smoke_request.json
+  feishu_smoke_result.json
+  feishu_smoke_summary.json
+```
+
+Dry-run search smoke:
+
+```powershell
+.\scripts\xhs_feishu_real_write_smoke.ps1 -JobType "search" -Operation "create" -JobId "feishu-smoke-search-001" -AccountId "xhs_dev_01"
+```
+
+Dry-run publish smoke:
+
+```powershell
+.\scripts\xhs_feishu_real_write_smoke.ps1 -JobType "publish" -Operation "create" -JobId "feishu-smoke-publish-001" -AccountId "xhs_dev_01"
+```
+
+Real smoke requires all of these at the same time: `XHS_FEISHU_WRITE_ENABLED=true`, `XHS_ALLOW_REAL_FEISHU_WRITE=true`, `XHS_FEISHU_SMOKE_ENABLED=true`, script flag `-RealWrite`, and an `XHS_SMOKE` marker in the single-record payload. Update smoke also requires `-FeishuRecordId`.
+
+Use a test Feishu table, run dry-run first, inspect the payload, then run the real smoke only once. After real smoke, search the table for `XHS_SMOKE` and manually delete or mark the test record. Do not use the smoke script for batch writes, table scans, deletes, production-table cleanup, Xiaohongshu actions, Yingdao, KuaJingVS open shop, MinIO upload, PostgreSQL write, or real n8n/OpenClaw.

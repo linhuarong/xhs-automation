@@ -452,6 +452,8 @@ def test_controlled_feishu_write_dependency_is_reported_as_safe_by_default(tmp_p
         "xhs_feishu_plan_search_write.ps1",
         "xhs_feishu_plan_publish_write.ps1",
         "xhs_feishu_write_runbook.txt",
+        "xhs_feishu_real_write_smoke.ps1",
+        "xhs_feishu_real_write_smoke_runbook.txt",
     ]:
         (scripts / script_name).write_text("", encoding="utf-8")
 
@@ -462,6 +464,8 @@ def test_controlled_feishu_write_dependency_is_reported_as_safe_by_default(tmp_p
     assert feishu_write.status == "disabled"
     assert feishu_write.checks["feishu_write_enabled"] is False
     assert feishu_write.checks["real_feishu_write_allowed"] is False
+    assert feishu_write.checks["feishu_smoke_enabled"] is False
+    assert feishu_write.checks["feishu_smoke_marker_required"] is True
     assert feishu_write.checks["feishu_dry_run_default"] is True
     assert feishu_write.checks["scripts_available"] is True
     assert feishu_write.checks["safe_mode"] is True
