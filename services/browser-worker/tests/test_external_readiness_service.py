@@ -13,7 +13,7 @@ def test_default_readiness_safe_mode_without_env(tmp_path) -> None:
     assert result.status == "success"
     assert result.safe_mode is True
     assert result.environment == "local"
-    assert result.summary.total == 23
+    assert result.summary.total == 24
 
 
 def test_missing_kjvs_profile_map_is_missing_config(tmp_path) -> None:
@@ -473,6 +473,30 @@ def test_controlled_feishu_write_dependency_is_reported_as_safe_by_default(tmp_p
     assert feishu_write.checks["feishu_dry_run_default"] is True
     assert feishu_write.checks["scripts_available"] is True
     assert feishu_write.checks["safe_mode"] is True
+
+
+def test_controlled_n8n_dispatch_smoke_dependency_is_reported_as_disabled_by_default(tmp_path) -> None:
+    scripts = tmp_path / "scripts"
+    scripts.mkdir(exist_ok=True)
+    for script_name in [
+        "xhs_n8n_dispatch_search_smoke.ps1",
+        "xhs_n8n_dispatch_publish_smoke.ps1",
+        "xhs_n8n_dispatch_full_dry_run_smoke.ps1",
+        "xhs_n8n_dispatch_smoke_runbook.txt",
+    ]:
+        (scripts / script_name).write_text("", encoding="utf-8")
+
+    result = ExternalReadinessService(env={}, worker_root=tmp_path).check_all()
+    dispatch = _dependency(result, "controlled_n8n_dispatch_smoke")
+
+    assert dispatch.mode == "local_browser_worker_dry_run_dispatch"
+    assert dispatch.status == "disabled"
+    assert dispatch.checks["dispatch_smoke_enabled"] is False
+    assert dispatch.checks["dry_run_default"] is True
+    assert dispatch.checks["local_base_url_required"] is True
+    assert dispatch.checks["real_n8n_webhook_forbidden"] is True
+    assert dispatch.checks["dispatch_scripts_available"] is True
+    assert dispatch.checks["safe_mode"] is True
 
 
 def test_local_e2e_replay_dependency_is_reported(tmp_path) -> None:

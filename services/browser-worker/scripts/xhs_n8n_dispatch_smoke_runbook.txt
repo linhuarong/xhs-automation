@@ -1,0 +1,24 @@
+Task46 n8n Dispatch Dry-run Smoke
+
+Purpose:
+- Exercise browser-worker local dry-run dispatch payloads in an n8n-shaped flow.
+- Generate n8n_dispatch_request.json, n8n_dispatch_result.json, and n8n_dispatch_summary.json.
+
+Safety boundary:
+- Only call local browser-worker at http://127.0.0.1:8000 or http://localhost:8000.
+- Do not call real n8n, real external webhook URLs, Feishu real write, MinIO real upload, PostgreSQL real write, Yingdao, KuaJingVS, OpenClaw, or Xiaohongshu.
+- Scripts always send dry_run=true.
+
+Run search smoke:
+.\scripts\xhs_n8n_dispatch_search_smoke.ps1 -JobId "n8n-search-smoke-001" -AccountId "xhs_dev_01"
+
+Run publish smoke:
+.\scripts\xhs_n8n_dispatch_publish_smoke.ps1 -JobId "n8n-publish-smoke-001" -AccountId "xhs_dev_01"
+
+Run full dry-run smoke:
+.\scripts\xhs_n8n_dispatch_full_dry_run_smoke.ps1 -JobId "n8n-full-smoke-001" -AccountId "xhs_dev_01"
+
+Expected outputs:
+.local_rpa_queue/n8n_dispatch/{search|publish|full}/{job_id}/n8n_dispatch_request.json
+.local_rpa_queue/n8n_dispatch/{search|publish|full}/{job_id}/n8n_dispatch_result.json
+.local_rpa_queue/n8n_dispatch/{search|publish|full}/{job_id}/n8n_dispatch_summary.json

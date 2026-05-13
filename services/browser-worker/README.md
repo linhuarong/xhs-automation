@@ -1805,3 +1805,34 @@ Dry-run publish readback:
 Real write plus readback requires all of these at the same time: `XHS_FEISHU_WRITE_ENABLED=true`, `XHS_ALLOW_REAL_FEISHU_WRITE=true`, `XHS_FEISHU_SMOKE_ENABLED=true`, `XHS_FEISHU_READBACK_ENABLED=true`, script flags `-RealWrite -Readback`, and an `XHS_SMOKE` marker. Readback-only mode requires `-Readback` and `-FeishuRecordId`.
 
 The readback endpoint only reads one record id. It does not list records, batch read, delete records, scan a table, call Xiaohongshu, call Yingdao, open shop, upload MinIO objects, write PostgreSQL, or trigger real n8n/OpenClaw.
+
+## n8n Dispatch Dry-run Smoke
+
+Task 46 adds a local-only n8n-style dispatch smoke for browser-worker dry-run chains. It builds an n8n webhook-shaped payload, dispatches only local dry-run steps, and writes:
+
+```text
+.local_rpa_queue/n8n_dispatch/{search|publish|full}/{job_id}/
+  n8n_dispatch_request.json
+  n8n_dispatch_result.json
+  n8n_dispatch_summary.json
+```
+
+Run search dispatch smoke:
+
+```powershell
+.\scripts\xhs_n8n_dispatch_search_smoke.ps1 -BaseUrl "http://127.0.0.1:8000" -JobId "n8n-search-smoke-001" -AccountId "xhs_dev_01"
+```
+
+Run publish dispatch smoke:
+
+```powershell
+.\scripts\xhs_n8n_dispatch_publish_smoke.ps1 -BaseUrl "http://127.0.0.1:8000" -JobId "n8n-publish-smoke-001" -AccountId "xhs_dev_01"
+```
+
+Run full dry-run dispatch smoke:
+
+```powershell
+.\scripts\xhs_n8n_dispatch_full_dry_run_smoke.ps1 -BaseUrl "http://127.0.0.1:8000" -JobId "n8n-full-smoke-001" -AccountId "xhs_dev_01"
+```
+
+The scripts reject non-local BaseUrl values and always send `dry_run=true`. This smoke does not call real n8n, trigger a real workflow, open Xiaohongshu, call Yingdao/KuaJingVS, write real Feishu, upload real MinIO, write real PostgreSQL, or call OpenClaw.

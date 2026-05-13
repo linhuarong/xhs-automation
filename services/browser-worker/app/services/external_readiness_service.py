@@ -55,6 +55,7 @@ class ExternalReadinessService:
             self.check_local_contract_replay(),
             self.check_local_persistence_replay(),
             self.check_local_e2e_replay(),
+            self.check_controlled_n8n_dispatch_smoke(),
             self.check_n8n_contract(),
             self.check_openclaw_contract(),
             self.check_local_storage(),
@@ -821,6 +822,48 @@ class ExternalReadinessService:
                 "webhook_search_route": True,
                 "webhook_publish_route": True,
             },
+        )
+
+    def check_controlled_n8n_dispatch_smoke(self) -> ExternalDependencyStatus:
+        """Check controlled local n8n dispatch smoke readiness without calling n8n."""
+        dispatch_root = self._resolve_worker_path(self._get("XHS_N8N_DISPATCH_OUTPUT_ROOT", ".local_rpa_queue/n8n_dispatch"))
+        dispatch_parent = dispatch_root if dispatch_root.exists() else dispatch_root.parent
+        scripts = [
+            self.worker_root / "scripts/xhs_n8n_dispatch_search_smoke.ps1",
+            self.worker_root / "scripts/xhs_n8n_dispatch_publish_smoke.ps1",
+            self.worker_root / "scripts/xhs_n8n_dispatch_full_dry_run_smoke.ps1",
+            self.worker_root / "scripts/xhs_n8n_dispatch_smoke_runbook.txt",
+        ]
+        enabled = self._truthy(self._get("XHS_N8N_DISPATCH_SMOKE_ENABLED", "false"))
+        require_local_base_url = self._truthy(self._get("XHS_N8N_DISPATCH_REQUIRE_LOCAL_BASE_URL", "true"))
+        checks = {
+            "dispatch_smoke_enabled": enabled,
+            "dispatch_output_dir_writable": dispatch_parent.exists() and os.access(dispatch_parent, os.W_OK),
+            "dispatch_scripts_available": all(path.exists() for path in scripts),
+            "dry_run_default": True,
+            "local_base_url_required": require_local_base_url,
+            "real_n8n_webhook_forbidden": True,
+            "real_feishu_write_forbidden": True,
+            "real_postgres_write_forbidden": True,
+            "real_minio_upload_forbidden": True,
+            "safe_mode": require_local_base_url and not self.live_write_actions_enabled,
+        }
+        if not enabled:
+            status = "disabled"
+            message = "Controlled n8n dispatch smoke is disabled; dry-run API remains local-only"
+        elif checks["dispatch_output_dir_writable"] and checks["dispatch_scripts_available"] and checks["safe_mode"]:
+            status = "ready"
+            message = "Controlled n8n dispatch dry-run smoke is ready"
+        else:
+            status = "missing_config"
+            message = "Controlled n8n dispatch smoke needs scripts, writable output, and local-only base URL guard"
+        return ExternalDependencyStatus(
+            name="controlled_n8n_dispatch_smoke",
+            mode="local_browser_worker_dry_run_dispatch",
+            status=status,
+            required=False,
+            message=message,
+            checks=checks,
         )
 
     def check_openclaw_contract(self) -> ExternalDependencyStatus:

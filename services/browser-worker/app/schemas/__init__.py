@@ -179,6 +179,12 @@ from app.schemas.xhs_feishu_write import (
     XhsFeishuWriteResult,
     XhsFeishuWriteSummary,
 )
+from app.schemas.xhs_n8n_dispatch import (
+    XhsN8nDispatchRequest,
+    XhsN8nDispatchResult,
+    XhsN8nDispatchStep,
+    XhsN8nDispatchSummary,
+)
 
 __all__ = [
     "PublishJob",
@@ -325,4 +331,8 @@ __all__ = [
     "XhsFeishuReadbackRequest",
     "XhsFeishuReadbackCheck",
     "XhsFeishuReadbackSummary",
+    "XhsN8nDispatchRequest",
+    "XhsN8nDispatchStep",
+    "XhsN8nDispatchResult",
+    "XhsN8nDispatchSummary",
 ]

@@ -14,6 +14,7 @@ from app.services.local_contract_replay_service import LocalContractReplayServic
 from app.services.local_e2e_replay_service import LocalE2EReplayService
 from app.services.local_persistence_replay_service import LocalPersistenceReplayService
 from app.services.minio_storage_service import MinioStorageService
+from app.services.n8n_dispatch_smoke_service import N8nDispatchSmokeService
 from app.services.postgres_persistence_service import PostgresPersistenceService
 from app.services.yingdao_desktop_smoke_service import YingdaoDesktopSmokeService
 from app.services.yingdao_form_fill_simulator_service import YingdaoFormFillSimulatorService
@@ -66,6 +67,11 @@ local_e2e_replay_service = LocalE2EReplayService(
 postgres_persistence_service = PostgresPersistenceService()
 minio_storage_service = MinioStorageService()
 feishu_write_service = FeishuWriteService()
+n8n_dispatch_smoke_service = N8nDispatchSmokeService(
+    feishu_write_service=feishu_write_service,
+    minio_storage_service=minio_storage_service,
+    postgres_persistence_service=postgres_persistence_service,
+)
 
 
 class YingdaoPublishHandoffRequest(BaseModel):
@@ -380,6 +386,18 @@ class XhsFeishuReadbackApiRequest(BaseModel):
     table_id: str | None = None
     app_token: str | None = None
     field_mapping: dict[str, str] | None = None
+
+
+class XhsN8nDispatchApiRequest(BaseModel):
+    """Request for local n8n-style dry-run dispatch smoke."""
+
+    job_id: str
+    account_id: str
+    trigger_source: str = "n8n_smoke"
+    dry_run: bool = True
+    steps: list[str] | None = None
+    payload: dict | None = None
+    base_url: str = "http://127.0.0.1:8000"
 
 
 @router.get("/api/workflows/xhs/external-readiness", response_model=None)
@@ -1449,6 +1467,24 @@ def readback_publish_from_feishu(job: XhsFeishuReadbackApiRequest) -> dict | JSO
         return JSONResponse(status_code=400, content=error_to_dict(exc))
 
 
+@router.post("/api/workflows/xhs/n8n-dispatch/search", response_model=None)
+def dispatch_n8n_search_dry_run(job: XhsN8nDispatchApiRequest) -> dict | JSONResponse:
+    """Run local n8n-style search dry-run dispatch smoke without real n8n."""
+    return _dispatch_n8n_smoke("search", job)
+
+
+@router.post("/api/workflows/xhs/n8n-dispatch/publish", response_model=None)
+def dispatch_n8n_publish_dry_run(job: XhsN8nDispatchApiRequest) -> dict | JSONResponse:
+    """Run local n8n-style publish dry-run dispatch smoke without real n8n."""
+    return _dispatch_n8n_smoke("publish", job)
+
+
+@router.post("/api/workflows/xhs/n8n-dispatch/full-dry-run", response_model=None)
+def dispatch_n8n_full_dry_run(job: XhsN8nDispatchApiRequest) -> dict | JSONResponse:
+    """Run local n8n-style full dry-run dispatch smoke without real n8n."""
+    return _dispatch_n8n_smoke("full", job)
+
+
 @router.get("/api/workflows/xhs/account-binding/search/{job_id}/verify", response_model=None)
 def verify_xhs_account_binding_search(job_id: str) -> dict | JSONResponse:
     """Verify search account binding confirmation."""
@@ -2096,6 +2132,49 @@ def _append_feishu_write_audit(event_type: str, result) -> None:
         )
     except Exception:
         pass
+
+
+def _dispatch_n8n_smoke(job_type: str, job: XhsN8nDispatchApiRequest) -> dict | JSONResponse:
+    """Run local n8n dispatch smoke and append audit without external calls."""
+    try:
+        from app.schemas import XhsN8nDispatchRequest
+
+        result = n8n_dispatch_smoke_service.execute_local_dry_run_dispatch(
+            XhsN8nDispatchRequest(
+                job_id=job.job_id,
+                job_type=job_type,
+                account_id=job.account_id,
+                trigger_source=job.trigger_source,
+                dry_run=job.dry_run,
+                steps=job.steps,
+                payload=job.payload,
+                base_url=job.base_url,
+            )
+        )
+        try:
+            audit_log_service.append_event(
+                event_type=f"n8n_dispatch_{job_type}",
+                job_id=result.job_id,
+                status=result.status,
+                error_code=result.error_code,
+                message="local n8n dry-run dispatch smoke completed",
+                actor="local_api",
+                metadata={
+                    "job_id": result.job_id,
+                    "job_type": result.job_type,
+                    "dry_run": result.dry_run,
+                    "request_path": result.request_path,
+                    "result_path": result.result_path,
+                    "summary_path": result.summary_path,
+                    "external_calls_made": result.external_calls_made,
+                    "step_count": len(result.steps),
+                },
+            )
+        except Exception:
+            pass
+        return _model_to_dict(result)
+    except WorkerError as exc:
+        return JSONResponse(status_code=400, content=error_to_dict(exc))
 
 
 def _verify_account_binding(job_type: str, job_id: str) -> dict | JSONResponse:
