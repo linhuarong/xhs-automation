@@ -169,6 +169,9 @@ from app.schemas.xhs_minio_storage import (
 )
 from app.schemas.xhs_feishu_write import (
     XhsFeishuFieldMapping,
+    XhsFeishuReadbackCheck,
+    XhsFeishuReadbackRequest,
+    XhsFeishuReadbackSummary,
     XhsFeishuWritePayload,
     XhsFeishuWritePlan,
     XhsFeishuWritePlanItem,
@@ -319,4 +322,7 @@ __all__ = [
     "XhsFeishuWritePayload",
     "XhsFeishuWriteResult",
     "XhsFeishuWriteSummary",
+    "XhsFeishuReadbackRequest",
+    "XhsFeishuReadbackCheck",
+    "XhsFeishuReadbackSummary",
 ]

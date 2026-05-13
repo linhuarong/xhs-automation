@@ -1,0 +1,49 @@
+Feishu controlled real-write readback smoke runbook
+
+Purpose
+- Verify one Feishu smoke record and its field mapping.
+- Write one XHS_SMOKE record, read back that same record, then compare expected and actual fields.
+- Keep the default path dry-run.
+
+Dry-run first
+1. Start browser-worker locally.
+2. Run xhs_feishu_real_write_readback_smoke.ps1 without -RealWrite.
+3. Review feishu_readback_expected.json and feishu_readback_check.json.
+4. Confirm the payload contains XHS_SMOKE, Task45, timestamp, and job_id.
+
+Before real write plus readback
+1. Use a Feishu test table.
+2. Do not use a production table for repeated smoke runs.
+3. Set local environment flags only:
+   - XHS_FEISHU_WRITE_ENABLED=true
+   - XHS_ALLOW_REAL_FEISHU_WRITE=true
+   - XHS_FEISHU_SMOKE_ENABLED=true
+   - XHS_FEISHU_READBACK_ENABLED=true
+4. Run with both -RealWrite and -Readback.
+
+Readback rules
+- Read back only the record created by the smoke command or the explicit FeishuRecordId.
+- Do not list records.
+- Do not batch read.
+- Do not delete records.
+- If the readback record does not contain XHS_SMOKE, stop and treat the check as failed.
+
+After real smoke
+1. Search the Feishu table for XHS_SMOKE.
+2. Confirm field values match the smoke output.
+3. Manually delete or mark the test record.
+4. Do not commit .env, credentials, or .local_rpa_queue outputs.
+
+Safety boundary
+- Do not call Xiaohongshu.
+- Do not call Yingdao.
+- Do not open shop.
+- Do not upload MinIO objects.
+- Do not write PostgreSQL.
+- Do not trigger real n8n or OpenClaw.
+
+Dry-run example
+.\scripts\xhs_feishu_real_write_readback_smoke.ps1 -JobType "search" -Operation "create" -JobId "feishu-readback-search-001" -AccountId "xhs_dev_01" -Readback
+
+Real write plus readback example
+.\scripts\xhs_feishu_real_write_readback_smoke.ps1 -JobType "search" -Operation "create" -JobId "feishu-readback-search-001" -AccountId "xhs_dev_01" -RealWrite -Readback

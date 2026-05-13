@@ -368,6 +368,20 @@ class XhsFeishuWriteApiRequest(BaseModel):
     include_raw_payload: bool = True
 
 
+class XhsFeishuReadbackApiRequest(BaseModel):
+    """Request for controlled single-record Feishu readback smoke."""
+
+    job_id: str
+    account_id: str | None = None
+    operation: str = "readback"
+    feishu_record_id: str | None = None
+    records: list[dict] | None = None
+    dry_run: bool = True
+    table_id: str | None = None
+    app_token: str | None = None
+    field_mapping: dict[str, str] | None = None
+
+
 @router.get("/api/workflows/xhs/external-readiness", response_model=None)
 def get_external_readiness() -> ExternalReadinessResult | JSONResponse:
     """Return safe external readiness status without live external calls."""
@@ -1380,6 +1394,56 @@ def plan_or_write_publish_to_feishu(job: XhsFeishuWriteApiRequest) -> dict | JSO
             )
         )
         _append_feishu_write_audit("feishu_write_publish", result)
+        return _model_to_dict(result)
+    except WorkerError as exc:
+        return JSONResponse(status_code=400, content=error_to_dict(exc))
+
+
+@router.post("/api/workflows/xhs/feishu-readback/search", response_model=None)
+def readback_search_from_feishu(job: XhsFeishuReadbackApiRequest) -> dict | JSONResponse:
+    """Dry-run or explicitly read back one Feishu search smoke record."""
+    try:
+        from app.schemas import XhsFeishuReadbackRequest
+
+        result = feishu_write_service.readback_search(
+            XhsFeishuReadbackRequest(
+                job_id=job.job_id,
+                job_type="search",
+                account_id=job.account_id,
+                operation=job.operation,
+                feishu_record_id=job.feishu_record_id,
+                records=job.records,
+                dry_run=job.dry_run,
+                table_id=job.table_id,
+                app_token=job.app_token,
+                field_mapping=job.field_mapping,
+            )
+        )
+        return _model_to_dict(result)
+    except WorkerError as exc:
+        return JSONResponse(status_code=400, content=error_to_dict(exc))
+
+
+@router.post("/api/workflows/xhs/feishu-readback/publish", response_model=None)
+def readback_publish_from_feishu(job: XhsFeishuReadbackApiRequest) -> dict | JSONResponse:
+    """Dry-run or explicitly read back one Feishu publish smoke record."""
+    try:
+        from app.schemas import XhsFeishuReadbackRequest
+
+        result = feishu_write_service.readback_publish(
+            XhsFeishuReadbackRequest(
+                job_id=job.job_id,
+                job_type="publish",
+                account_id=job.account_id,
+                operation=job.operation,
+                feishu_record_id=job.feishu_record_id,
+                records=job.records,
+                dry_run=job.dry_run,
+                table_id=job.table_id,
+                app_token=job.app_token,
+                field_mapping=job.field_mapping,
+            )
+        )
         return _model_to_dict(result)
     except WorkerError as exc:
         return JSONResponse(status_code=400, content=error_to_dict(exc))

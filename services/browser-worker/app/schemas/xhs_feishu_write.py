@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 
 XhsFeishuJobType = Literal["search", "publish"]
 XhsFeishuRecordOperation = Literal["create", "update", "upsert_plan_only"]
+XhsFeishuReadbackOperation = Literal["create", "update", "readback"]
 
 
 class XhsFeishuFieldMapping(BaseModel):
@@ -95,6 +96,7 @@ class XhsFeishuWriteResult(BaseModel):
     planned_update_count: int = 0
     written_count: int = 0
     skipped_count: int = 0
+    record_id: str | None = None
     plan_path: str | None = None
     payload_path: str | None = None
     result_path: str | None = None
@@ -121,12 +123,79 @@ class XhsFeishuWriteSummary(BaseModel):
     planned_update_count: int = 0
     written_count: int = 0
     skipped_count: int = 0
+    record_id: str | None = None
     plan_path: str | None = None
     payload_path: str | None = None
     result_path: str | None = None
     summary_path: str | None = None
     payload_scan: dict[str, Any] = Field(default_factory=dict)
     forbidden_actions: dict[str, bool] = Field(default_factory=dict)
+    created_at: str
+    error_code: str | None = None
+    error_message: str | None = None
+
+
+class XhsFeishuReadbackRequest(BaseModel):
+    """Request for controlled single-record Feishu readback checking."""
+
+    job_id: str
+    job_type: XhsFeishuJobType
+    account_id: str | None = None
+    operation: XhsFeishuReadbackOperation = "readback"
+    feishu_record_id: str | None = None
+    records: list[dict[str, Any]] | None = None
+    dry_run: bool = True
+    table_id: str | None = None
+    app_token: str | None = None
+    field_mapping: dict[str, str] | None = None
+
+
+class XhsFeishuReadbackCheck(BaseModel):
+    """Expected-vs-actual Feishu field comparison."""
+
+    schema_version: str = "1.0"
+    check_type: str = "controlled_feishu_readback_check"
+    job_id: str
+    job_type: XhsFeishuJobType
+    operation: XhsFeishuReadbackOperation
+    dry_run: bool = True
+    record_id: str | None = None
+    expected_fields: dict[str, Any] = Field(default_factory=dict)
+    actual_fields: dict[str, Any] = Field(default_factory=dict)
+    matched_fields: list[str] = Field(default_factory=list)
+    missing_fields: list[str] = Field(default_factory=list)
+    mismatched_fields: list[str] = Field(default_factory=list)
+    extra_fields: list[str] = Field(default_factory=list)
+    check_passed: bool = False
+    error_code: str | None = None
+    error_message: str | None = None
+
+
+class XhsFeishuReadbackSummary(BaseModel):
+    """Summary for controlled Feishu readback smoke."""
+
+    schema_version: str = "1.0"
+    summary_type: str = "controlled_feishu_readback_summary"
+    job_id: str
+    job_type: XhsFeishuJobType
+    status: str
+    operation: XhsFeishuReadbackOperation
+    dry_run: bool = True
+    readback_enabled: bool = False
+    real_readback_allowed: bool = False
+    record_id_present: bool = False
+    expected_field_count: int = 0
+    actual_field_count: int = 0
+    matched_field_count: int = 0
+    mismatched_field_count: int = 0
+    missing_field_count: int = 0
+    extra_field_count: int = 0
+    check_passed: bool = False
+    request_path: str | None = None
+    expected_path: str | None = None
+    actual_path: str | None = None
+    check_path: str | None = None
+    summary_path: str | None = None
     created_at: str
     error_code: str | None = None
     error_message: str | None = None

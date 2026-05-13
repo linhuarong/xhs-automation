@@ -1776,3 +1776,32 @@ Dry-run publish smoke:
 Real smoke requires all of these at the same time: `XHS_FEISHU_WRITE_ENABLED=true`, `XHS_ALLOW_REAL_FEISHU_WRITE=true`, `XHS_FEISHU_SMOKE_ENABLED=true`, script flag `-RealWrite`, and an `XHS_SMOKE` marker in the single-record payload. Update smoke also requires `-FeishuRecordId`.
 
 Use a test Feishu table, run dry-run first, inspect the payload, then run the real smoke only once. After real smoke, search the table for `XHS_SMOKE` and manually delete or mark the test record. Do not use the smoke script for batch writes, table scans, deletes, production-table cleanup, Xiaohongshu actions, Yingdao, KuaJingVS open shop, MinIO upload, PostgreSQL write, or real n8n/OpenClaw.
+
+## Feishu Controlled Real-Write Readback Smoke
+
+Task 45 adds a single-record Feishu field-mapping readback smoke. The default remains dry-run. It writes local evidence under:
+
+```text
+.local_rpa_queue/feishu_readback/{search|publish}/{job_id}/
+  feishu_readback_request.json
+  feishu_readback_expected.json
+  feishu_readback_actual.json
+  feishu_readback_check.json
+  feishu_readback_summary.json
+```
+
+Dry-run search readback:
+
+```powershell
+.\scripts\xhs_feishu_real_write_readback_smoke.ps1 -JobType "search" -Operation "create" -JobId "feishu-readback-search-001" -AccountId "xhs_dev_01" -Readback
+```
+
+Dry-run publish readback:
+
+```powershell
+.\scripts\xhs_feishu_real_write_readback_smoke.ps1 -JobType "publish" -Operation "create" -JobId "feishu-readback-publish-001" -AccountId "xhs_dev_01" -Readback
+```
+
+Real write plus readback requires all of these at the same time: `XHS_FEISHU_WRITE_ENABLED=true`, `XHS_ALLOW_REAL_FEISHU_WRITE=true`, `XHS_FEISHU_SMOKE_ENABLED=true`, `XHS_FEISHU_READBACK_ENABLED=true`, script flags `-RealWrite -Readback`, and an `XHS_SMOKE` marker. Readback-only mode requires `-Readback` and `-FeishuRecordId`.
+
+The readback endpoint only reads one record id. It does not list records, batch read, delete records, scan a table, call Xiaohongshu, call Yingdao, open shop, upload MinIO objects, write PostgreSQL, or trigger real n8n/OpenClaw.
