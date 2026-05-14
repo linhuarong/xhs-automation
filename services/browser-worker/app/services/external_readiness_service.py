@@ -55,6 +55,7 @@ class ExternalReadinessService:
             self.check_local_contract_replay(),
             self.check_local_persistence_replay(),
             self.check_local_e2e_replay(),
+            self.check_controlled_n8n_handshake(),
             self.check_controlled_n8n_dispatch_smoke(),
             self.check_n8n_contract(),
             self.check_openclaw_contract(),
@@ -860,6 +861,52 @@ class ExternalReadinessService:
         return ExternalDependencyStatus(
             name="controlled_n8n_dispatch_smoke",
             mode="local_browser_worker_dry_run_dispatch",
+            status=status,
+            required=False,
+            message=message,
+            checks=checks,
+        )
+
+    def check_controlled_n8n_handshake(self) -> ExternalDependencyStatus:
+        """Check controlled n8n handshake readiness without connecting to n8n."""
+        handshake_root = self._resolve_worker_path(self._get("XHS_N8N_HANDSHAKE_OUTPUT_ROOT", ".local_rpa_queue/n8n_handshake"))
+        handshake_parent = handshake_root if handshake_root.exists() else handshake_root.parent
+        scripts = [
+            self.worker_root / "scripts/xhs_n8n_handshake_ping_smoke.ps1",
+            self.worker_root / "scripts/xhs_n8n_handshake_search_smoke.ps1",
+            self.worker_root / "scripts/xhs_n8n_handshake_publish_smoke.ps1",
+            self.worker_root / "scripts/xhs_n8n_handshake_full_smoke.ps1",
+            self.worker_root / "scripts/xhs_n8n_handshake_smoke_runbook.txt",
+        ]
+        enabled = self._truthy(self._get("XHS_N8N_HANDSHAKE_ENABLED", "false"))
+        real_allowed = self._truthy(self._get("XHS_ALLOW_REAL_N8N_HANDSHAKE", "false"))
+        webhook_configured = self._configured("XHS_N8N_HANDSHAKE_WEBHOOK_URL")
+        marker_required = self._truthy(self._get("XHS_N8N_HANDSHAKE_REQUIRE_MARKER", "true"))
+        checks = {
+            "handshake_enabled": enabled,
+            "real_n8n_handshake_allowed": real_allowed,
+            "webhook_url_configured": webhook_configured,
+            "handshake_output_dir_writable": handshake_parent.exists() and os.access(handshake_parent, os.W_OK),
+            "handshake_scripts_available": all(path.exists() for path in scripts),
+            "dry_run_default": True,
+            "marker_required": marker_required,
+            "single_send_only": True,
+            "batch_forbidden": True,
+            "retry_loop_forbidden": True,
+            "safe_mode": not self.live_write_actions_enabled,
+        }
+        if not enabled:
+            status = "disabled"
+            message = "Controlled n8n handshake is disabled; dry-run planning remains available"
+        elif enabled and real_allowed and webhook_configured and checks["handshake_scripts_available"] and checks["safe_mode"]:
+            status = "ready"
+            message = "Controlled n8n real handshake is explicitly enabled and configured"
+        else:
+            status = "dry_run_only"
+            message = "Controlled n8n handshake is limited to dry-run until both flags and webhook URL are configured"
+        return ExternalDependencyStatus(
+            name="controlled_n8n_handshake",
+            mode="controlled_real_n8n_webhook_handshake",
             status=status,
             required=False,
             message=message,

@@ -185,6 +185,12 @@ from app.schemas.xhs_n8n_dispatch import (
     XhsN8nDispatchStep,
     XhsN8nDispatchSummary,
 )
+from app.schemas.xhs_n8n_handshake import (
+    XhsN8nHandshakePayload,
+    XhsN8nHandshakeRequest,
+    XhsN8nHandshakeResponse,
+    XhsN8nHandshakeSummary,
+)
 
 __all__ = [
     "PublishJob",
@@ -335,4 +341,8 @@ __all__ = [
     "XhsN8nDispatchStep",
     "XhsN8nDispatchResult",
     "XhsN8nDispatchSummary",
+    "XhsN8nHandshakeRequest",
+    "XhsN8nHandshakePayload",
+    "XhsN8nHandshakeResponse",
+    "XhsN8nHandshakeSummary",
 ]

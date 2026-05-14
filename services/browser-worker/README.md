@@ -1836,3 +1836,45 @@ Run full dry-run dispatch smoke:
 ```
 
 The scripts reject non-local BaseUrl values and always send `dry_run=true`. This smoke does not call real n8n, trigger a real workflow, open Xiaohongshu, call Yingdao/KuaJingVS, write real Feishu, upload real MinIO, write real PostgreSQL, or call OpenClaw.
+
+## n8n Controlled Webhook Handshake Smoke
+
+Task 47 adds a controlled n8n webhook handshake smoke. The default is dry-run and writes local artifacts only:
+
+```text
+.local_rpa_queue/n8n_handshake/{ping|search|publish|full}/{handshake_id}/
+  n8n_handshake_request.json
+  n8n_handshake_response.json
+  n8n_handshake_summary.json
+```
+
+Dry-run ping:
+
+```powershell
+.\scripts\xhs_n8n_handshake_ping_smoke.ps1 -HandshakeId "n8n-handshake-ping-001"
+```
+
+Dry-run search:
+
+```powershell
+.\scripts\xhs_n8n_handshake_search_smoke.ps1 -HandshakeId "n8n-handshake-search-001" -JobId "search-handshake-001" -AccountId "xhs_dev_01"
+```
+
+Controlled real handshake requires all of these at the same time:
+
+- `XHS_N8N_HANDSHAKE_ENABLED=true`
+- `XHS_ALLOW_REAL_N8N_HANDSHAKE=true`
+- `XHS_N8N_HANDSHAKE_WEBHOOK_URL` or script `-WebhookUrl`
+- script flag `-RealHandshake`
+- payload marker `XHS_N8N_HANDSHAKE_SMOKE`
+
+Example controlled real ping:
+
+```powershell
+$env:XHS_N8N_HANDSHAKE_ENABLED = "true"
+$env:XHS_ALLOW_REAL_N8N_HANDSHAKE = "true"
+$env:XHS_N8N_HANDSHAKE_WEBHOOK_URL = "<your n8n test webhook URL>"
+.\scripts\xhs_n8n_handshake_ping_smoke.ps1 -HandshakeId "n8n-handshake-real-001" -JobId "n8n-handshake-real-001" -RealHandshake
+```
+
+The summary writes only a redacted webhook URL. This smoke sends at most one handshake request and does not batch or retry. It does not trigger Xiaohongshu search/publish, call Yingdao or KuaJingVS, write real Feishu, upload MinIO, write PostgreSQL, or call OpenClaw.

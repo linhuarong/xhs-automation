@@ -13,7 +13,7 @@ def test_default_readiness_safe_mode_without_env(tmp_path) -> None:
     assert result.status == "success"
     assert result.safe_mode is True
     assert result.environment == "local"
-    assert result.summary.total == 24
+    assert result.summary.total == 25
 
 
 def test_missing_kjvs_profile_map_is_missing_config(tmp_path) -> None:
@@ -497,6 +497,34 @@ def test_controlled_n8n_dispatch_smoke_dependency_is_reported_as_disabled_by_def
     assert dispatch.checks["real_n8n_webhook_forbidden"] is True
     assert dispatch.checks["dispatch_scripts_available"] is True
     assert dispatch.checks["safe_mode"] is True
+
+
+def test_controlled_n8n_handshake_dependency_is_reported_as_disabled_by_default(tmp_path) -> None:
+    scripts = tmp_path / "scripts"
+    scripts.mkdir(exist_ok=True)
+    for script_name in [
+        "xhs_n8n_handshake_ping_smoke.ps1",
+        "xhs_n8n_handshake_search_smoke.ps1",
+        "xhs_n8n_handshake_publish_smoke.ps1",
+        "xhs_n8n_handshake_full_smoke.ps1",
+        "xhs_n8n_handshake_smoke_runbook.txt",
+    ]:
+        (scripts / script_name).write_text("", encoding="utf-8")
+
+    result = ExternalReadinessService(env={}, worker_root=tmp_path).check_all()
+    handshake = _dependency(result, "controlled_n8n_handshake")
+
+    assert handshake.mode == "controlled_real_n8n_webhook_handshake"
+    assert handshake.status == "disabled"
+    assert handshake.checks["handshake_enabled"] is False
+    assert handshake.checks["real_n8n_handshake_allowed"] is False
+    assert handshake.checks["webhook_url_configured"] is False
+    assert handshake.checks["dry_run_default"] is True
+    assert handshake.checks["marker_required"] is True
+    assert handshake.checks["single_send_only"] is True
+    assert handshake.checks["batch_forbidden"] is True
+    assert handshake.checks["retry_loop_forbidden"] is True
+    assert handshake.checks["handshake_scripts_available"] is True
 
 
 def test_local_e2e_replay_dependency_is_reported(tmp_path) -> None:

@@ -1,0 +1,38 @@
+Task47 n8n Controlled Real Webhook Handshake Smoke
+
+Purpose:
+- Generate n8n_handshake_request.json, n8n_handshake_response.json, and n8n_handshake_summary.json.
+- Dry-run by default.
+- Optionally send one controlled real webhook handshake after explicit flags are enabled.
+
+Safety boundary:
+- Do not trigger Xiaohongshu search or publish.
+- Do not call Yingdao, KuaJingVS, Feishu, MinIO, PostgreSQL, OpenClaw, or batch webhooks.
+- Do not run retry loops.
+- Do not print full webhook URLs.
+- Do not write webhook secrets into summaries.
+
+Dry-run ping:
+.\scripts\xhs_n8n_handshake_ping_smoke.ps1 -HandshakeId "n8n-handshake-ping-001"
+
+Dry-run search:
+.\scripts\xhs_n8n_handshake_search_smoke.ps1 -HandshakeId "n8n-handshake-search-001" -JobId "search-handshake-001" -AccountId "xhs_dev_01"
+
+Dry-run publish:
+.\scripts\xhs_n8n_handshake_publish_smoke.ps1 -HandshakeId "n8n-handshake-publish-001" -JobId "publish-handshake-001" -AccountId "xhs_dev_01"
+
+Dry-run full:
+.\scripts\xhs_n8n_handshake_full_smoke.ps1 -HandshakeId "n8n-handshake-full-001" -JobId "full-handshake-001" -AccountId "xhs_dev_01"
+
+Controlled real handshake prerequisites:
+$env:XHS_N8N_HANDSHAKE_ENABLED = "true"
+$env:XHS_ALLOW_REAL_N8N_HANDSHAKE = "true"
+$env:XHS_N8N_HANDSHAKE_WEBHOOK_URL = "<your n8n test webhook URL>"
+
+Controlled real ping:
+.\scripts\xhs_n8n_handshake_ping_smoke.ps1 -HandshakeId "n8n-handshake-real-001" -JobId "n8n-handshake-real-001" -RealHandshake
+
+Expected outputs:
+.local_rpa_queue/n8n_handshake/{ping|search|publish|full}/{handshake_id}/n8n_handshake_request.json
+.local_rpa_queue/n8n_handshake/{ping|search|publish|full}/{handshake_id}/n8n_handshake_response.json
+.local_rpa_queue/n8n_handshake/{ping|search|publish|full}/{handshake_id}/n8n_handshake_summary.json

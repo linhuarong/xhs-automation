@@ -15,6 +15,7 @@ from app.services.local_e2e_replay_service import LocalE2EReplayService
 from app.services.local_persistence_replay_service import LocalPersistenceReplayService
 from app.services.minio_storage_service import MinioStorageService
 from app.services.n8n_dispatch_smoke_service import N8nDispatchSmokeService
+from app.services.n8n_handshake_service import N8nHandshakeService
 from app.services.postgres_persistence_service import PostgresPersistenceService
 from app.services.yingdao_desktop_smoke_service import YingdaoDesktopSmokeService
 from app.services.yingdao_form_fill_simulator_service import YingdaoFormFillSimulatorService
@@ -72,6 +73,7 @@ n8n_dispatch_smoke_service = N8nDispatchSmokeService(
     minio_storage_service=minio_storage_service,
     postgres_persistence_service=postgres_persistence_service,
 )
+n8n_handshake_service = N8nHandshakeService()
 
 
 class YingdaoPublishHandoffRequest(BaseModel):
@@ -398,6 +400,18 @@ class XhsN8nDispatchApiRequest(BaseModel):
     steps: list[str] | None = None
     payload: dict | None = None
     base_url: str = "http://127.0.0.1:8000"
+
+
+class XhsN8nHandshakeApiRequest(BaseModel):
+    """Request for controlled n8n webhook handshake smoke."""
+
+    handshake_id: str
+    job_id: str
+    account_id: str | None = None
+    dry_run: bool = True
+    webhook_url: str | None = None
+    marker: str = "XHS_N8N_HANDSHAKE_SMOKE"
+    payload: dict | None = None
 
 
 @router.get("/api/workflows/xhs/external-readiness", response_model=None)
@@ -1485,6 +1499,30 @@ def dispatch_n8n_full_dry_run(job: XhsN8nDispatchApiRequest) -> dict | JSONRespo
     return _dispatch_n8n_smoke("full", job)
 
 
+@router.post("/api/workflows/xhs/n8n-handshake/ping", response_model=None)
+def handshake_n8n_ping(job: XhsN8nHandshakeApiRequest) -> dict | JSONResponse:
+    """Run controlled n8n ping handshake smoke."""
+    return _run_n8n_handshake("ping", job)
+
+
+@router.post("/api/workflows/xhs/n8n-handshake/search", response_model=None)
+def handshake_n8n_search(job: XhsN8nHandshakeApiRequest) -> dict | JSONResponse:
+    """Run controlled n8n search handshake smoke without triggering search."""
+    return _run_n8n_handshake("search", job)
+
+
+@router.post("/api/workflows/xhs/n8n-handshake/publish", response_model=None)
+def handshake_n8n_publish(job: XhsN8nHandshakeApiRequest) -> dict | JSONResponse:
+    """Run controlled n8n publish handshake smoke without triggering publish."""
+    return _run_n8n_handshake("publish", job)
+
+
+@router.post("/api/workflows/xhs/n8n-handshake/full", response_model=None)
+def handshake_n8n_full(job: XhsN8nHandshakeApiRequest) -> dict | JSONResponse:
+    """Run controlled n8n full-chain handshake smoke without triggering workflows."""
+    return _run_n8n_handshake("full", job)
+
+
 @router.get("/api/workflows/xhs/account-binding/search/{job_id}/verify", response_model=None)
 def verify_xhs_account_binding_search(job_id: str) -> dict | JSONResponse:
     """Verify search account binding confirmation."""
@@ -2173,6 +2211,63 @@ def _dispatch_n8n_smoke(job_type: str, job: XhsN8nDispatchApiRequest) -> dict | 
         except Exception:
             pass
         return _model_to_dict(result)
+    except WorkerError as exc:
+        return JSONResponse(status_code=400, content=error_to_dict(exc))
+
+
+def _run_n8n_handshake(job_type: str, job: XhsN8nHandshakeApiRequest) -> dict | JSONResponse:
+    """Run controlled n8n handshake and append audit without leaking webhook secrets."""
+    try:
+        from app.schemas import XhsN8nHandshakeRequest
+
+        response = n8n_handshake_service.execute_handshake(
+            XhsN8nHandshakeRequest(
+                handshake_id=job.handshake_id,
+                job_id=job.job_id,
+                job_type=job_type,
+                account_id=job.account_id,
+                dry_run=job.dry_run,
+                webhook_url=job.webhook_url,
+                marker=job.marker,
+                payload=job.payload,
+            )
+        )
+        try:
+            paths = n8n_handshake_service.get_output_paths(job.handshake_id, job_type)
+            audit_log_service.append_event(
+                event_type=f"n8n_handshake_{job_type}",
+                job_id=job.job_id,
+                status="success" if response.response_valid else "failed",
+                error_code=response.error_code,
+                message="controlled n8n handshake smoke completed",
+                actor="local_api",
+                metadata={
+                    "handshake_id": response.handshake_id,
+                    "job_id": response.job_id,
+                    "job_type": response.job_type,
+                    "dry_run": response.dry_run,
+                    "http_status": response.http_status,
+                    "response_valid": response.response_valid,
+                    "marker_confirmed": response.marker_confirmed,
+                    "external_call_made": response.external_call_made,
+                    "request_path": paths["request_path"],
+                    "response_path": paths["response_path"],
+                    "summary_path": paths["summary_path"],
+                },
+            )
+        except Exception:
+            pass
+        payload = _model_to_dict(response)
+        paths = n8n_handshake_service.get_output_paths(job.handshake_id, job_type)
+        payload.update(
+            {
+                "status": "success" if response.error_code is None else "failed",
+                "request_path": paths["request_path"],
+                "response_path": paths["response_path"],
+                "summary_path": paths["summary_path"],
+            }
+        )
+        return payload
     except WorkerError as exc:
         return JSONResponse(status_code=400, content=error_to_dict(exc))
 
